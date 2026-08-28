@@ -728,6 +728,26 @@ function renderizarInventario() {
       `
       : "";
 
+    const imgFormatted = formatearUrlImagen(p.imagenUrl);
+    const imgHtml = imgFormatted
+      ? `
+        <div class="relative w-24 h-24 rounded-2xl bg-slate-900 border border-slate-700/80 flex items-center justify-center shrink-0 overflow-hidden shadow-inner group cursor-pointer">
+          <img src="${imgFormatted}" alt="${p.nombre}" loading="lazy" class="w-full h-full object-cover" onerror="this.classList.add('hidden'); this.nextElementSibling.classList.remove('hidden');" onclick="abrirFotoCompleta('${imgFormatted}', '${p.nombre.replace(/'/g, "\\'")}')">
+          <div class="hidden flex flex-col items-center justify-center w-full h-full text-slate-500 text-[10px]" onclick="editarProducto('${p.codigo}')">
+            <i data-lucide="wine" class="w-8 h-8 text-slate-600 mb-0.5"></i>
+          </div>
+          <!-- Fullscreen button -->
+          <button onclick="abrirFotoCompleta('${imgFormatted}', '${p.nombre.replace(/'/g, "\\'")}')" class="absolute bottom-1 right-1 w-7 h-7 bg-black/60 hover:bg-indigo-600 rounded-lg flex items-center justify-center opacity-80 transition-all active:scale-90" title="Ver en pantalla completa">
+            <i data-lucide="maximize-2" class="w-4 h-4 text-white"></i>
+          </button>
+        </div>
+      `
+      : `
+        <div class="w-24 h-24 rounded-2xl bg-slate-900 border border-slate-700/80 flex items-center justify-center shrink-0 text-slate-500 shadow-inner cursor-pointer" onclick="editarProducto('${p.codigo}')">
+          <i data-lucide="wine" class="w-8 h-8 text-slate-500"></i>
+        </div>
+      `;
+
     return `
       <div class="p-3.5 bg-slate-800/90 hover:bg-slate-800 border border-slate-700/80 ${borderStyle} rounded-2xl shadow-lg transition-all space-y-2">
         
@@ -740,14 +760,17 @@ function renderizarInventario() {
           ${badgeStock}
         </div>
 
-        <!-- Name & Details -->
-        <div class="cursor-pointer pt-0.5" onclick="editarProducto('${p.codigo}')">
-          <h4 class="text-sm font-extrabold text-white leading-snug">${p.nombre}</h4>
-          ${breakdownPill}
+        <!-- Body: Photo + Name & Breakdown -->
+        <div class="flex items-start gap-3 pt-0.5">
+          ${imgHtml}
+          <div class="flex-1 min-w-0 cursor-pointer" onclick="editarProducto('${p.codigo}')">
+            <h4 class="text-sm font-extrabold text-white leading-snug hover:text-indigo-300 transition-colors line-clamp-2">${p.nombre}</h4>
+            ${breakdownPill}
+          </div>
         </div>
 
         <!-- Pricing & Actions Row -->
-        <div class="flex items-center justify-between pt-1 border-t border-slate-700/50 font-mono">
+        <div class="flex items-center justify-between pt-1.5 border-t border-slate-700/50 font-mono">
           <div>
             <div class="flex items-baseline gap-2">
               <span class="text-sm font-black text-white">${fmtCRC(p.precioVentaCRC)}</span>
@@ -806,7 +829,129 @@ function ordenarProductos() {
 }
 
 // ==========================================================================
-// MODAL DE PRODUCTO (DUAL CURRENCY)
+// FORMATEADOR DE IMÁGENES / GOOGLE DRIVE
+// ==========================================================================
+
+// --------------------------------------------------------------------------
+// LIGHTBOX: Foto en pantalla completa (para mostrar a clientes)
+// --------------------------------------------------------------------------
+function abrirFotoCompleta(url, nombre) {
+  const modal = document.getElementById("modalFotoCompleta");
+  const img = document.getElementById("fotoCompletaImg");
+  const nombreEl = document.getElementById("fotoCompletaNombre");
+
+  if (!modal || !img) return;
+
+  img.src = url;
+  img.alt = nombre || "Licor";
+
+  if (nombreEl) {
+    const p = nombreEl.querySelector("p");
+    if (p) p.textContent = nombre || "";
+  }
+
+  modal.classList.remove("hidden");
+  modal.classList.add("flex");
+  inicializarIconos();
+
+  // Bloquear scroll de fondo
+  document.body.style.overflow = "hidden";
+}
+
+function cerrarFotoCompleta() {
+  const modal = document.getElementById("modalFotoCompleta");
+  if (!modal) return;
+  modal.classList.add("hidden");
+  modal.classList.remove("flex");
+  document.body.style.overflow = "";
+}
+
+// Cerrar con tecla Escape
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") cerrarFotoCompleta();
+});
+
+function formatearUrlImagen(urlOrId) {
+  if (!urlOrId || typeof urlOrId !== 'string') return '';
+  const trimmed = urlOrId.trim();
+  if (!trimmed) return '';
+
+  // 1. Extraer ID de enlace de Google Drive
+  const matchFileD = trimmed.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+  if (matchFileD && matchFileD[1]) {
+    return `https://lh3.googleusercontent.com/d/${matchFileD[1]}`;
+  }
+
+  const matchIdParam = trimmed.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  if (matchIdParam && matchIdParam[1]) {
+    return `https://lh3.googleusercontent.com/d/${matchIdParam[1]}`;
+  }
+
+  const matchGoogleUserContent = trimmed.match(/googleusercontent\.com\/d\/([a-zA-Z0-9_-]+)/);
+  if (matchGoogleUserContent && matchGoogleUserContent[1]) {
+    return `https://lh3.googleusercontent.com/d/${matchGoogleUserContent[1]}`;
+  }
+
+  // Si pegó directamente el ID alfanumérico largo de Drive
+  if (/^[a-zA-Z0-9_-]{25,50}$/.test(trimmed)) {
+    return `https://lh3.googleusercontent.com/d/${trimmed}`;
+  }
+
+  // 2. Si es una URL directa (http/https/data)
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('data:image/')) {
+    return trimmed;
+  }
+
+  return trimmed;
+}
+
+function actualizarPreviewImagenModal() {
+  const input = document.getElementById("prodImagenUrl");
+  const preview = document.getElementById("prodImagenPreview");
+  const placeholder = document.getElementById("prodImagenPlaceholder");
+  const btnLimpiar = document.getElementById("btnLimpiarImagen");
+
+  if (!input || !preview || !placeholder) return;
+
+  const raw = (input.value || "").trim();
+  if (!raw) {
+    preview.src = "";
+    preview.classList.add("hidden");
+    placeholder.classList.remove("hidden");
+    placeholder.innerHTML = `<i data-lucide="wine" class="w-6 h-6 text-slate-600 mb-0.5"></i><span>Sin foto</span>`;
+    if (btnLimpiar) btnLimpiar.classList.add("hidden");
+    inicializarIconos();
+    return;
+  }
+
+  const formattedUrl = formatearUrlImagen(raw);
+  preview.src = formattedUrl;
+  preview.classList.remove("hidden");
+  placeholder.classList.add("hidden");
+  if (btnLimpiar) btnLimpiar.classList.remove("hidden");
+}
+
+function onImgPreviewError() {
+  const preview = document.getElementById("prodImagenPreview");
+  const placeholder = document.getElementById("prodImagenPlaceholder");
+  if (preview) {
+    preview.classList.add("hidden");
+  }
+  if (placeholder) {
+    placeholder.classList.remove("hidden");
+    placeholder.innerHTML = `<i data-lucide="alert-circle" class="w-5 h-5 text-amber-500 mb-0.5"></i><span class="text-amber-400 text-[9px]">No carga</span>`;
+    inicializarIconos();
+  }
+}
+
+function limpiarImagenModal() {
+  const input = document.getElementById("prodImagenUrl");
+  if (input) input.value = "";
+  actualizarPreviewImagenModal();
+}
+
+// ==========================================================================
+// MODAL DE PRODUCTO (DUAL CURRENCY & FOTO)
 // ==========================================================================
 function abrirModalProducto(producto = null) {
   const modal = document.getElementById("modalProducto");
@@ -819,6 +964,7 @@ function abrirModalProducto(producto = null) {
     document.getElementById("prodCodigo").disabled = true;
     document.getElementById("prodNombre").value = producto.nombre || "";
     document.getElementById("prodCategoria").value = producto.categoria || "";
+    document.getElementById("prodImagenUrl").value = producto.imagenUrl || "";
     document.getElementById("prodPrecioVentaUSD").value = producto.precioVentaUSD || 0;
     document.getElementById("prodPrecioVentaCRC").value = producto.precioVentaCRC || 0;
     document.getElementById("prodCostoRefUSD").value = producto.costoRefUSD || 0;
@@ -831,10 +977,12 @@ function abrirModalProducto(producto = null) {
     document.getElementById("formProducto").reset();
     document.getElementById("prodCodigo").disabled = false;
     document.getElementById("prodCodigo").value = "LIC-" + Math.floor(100 + Math.random() * 900);
+    document.getElementById("prodImagenUrl").value = "";
     document.getElementById("prodStockMinimo").value = 2;
     btnEliminar.classList.add("hidden");
   }
 
+  actualizarPreviewImagenModal();
   modal.classList.remove("hidden");
   modal.classList.add("flex");
   inicializarIconos();
@@ -878,6 +1026,7 @@ async function guardarProductoForm(e) {
   const codigo = document.getElementById("prodCodigo").value.trim().toUpperCase();
   const nombre = document.getElementById("prodNombre").value.trim();
   const categoria = document.getElementById("prodCategoria").value.trim() || "General";
+  const imagenUrl = document.getElementById("prodImagenUrl").value.trim();
   const precioVentaUSD = Number(document.getElementById("prodPrecioVentaUSD").value) || 0;
   const precioVentaCRC = Number(document.getElementById("prodPrecioVentaCRC").value) || 0;
   const costoRefUSD = Number(document.getElementById("prodCostoRefUSD").value) || 0;
@@ -889,6 +1038,7 @@ async function guardarProductoForm(e) {
     codigo,
     nombre,
     categoria,
+    imagenUrl,
     precioVentaUSD,
     precioVentaCRC,
     costoRefUSD,
@@ -1139,13 +1289,21 @@ function filtrarPosProductos() {
 
   dropdown.innerHTML = matches.map(p => {
     const st = stockMap[p.codigo] || 0;
+    const imgUrl = formatearUrlImagen(p.imagenUrl);
+    const imgHtml = imgUrl
+      ? `<img src="${imgUrl}" alt="${p.nombre}" class="w-9 h-9 rounded-lg object-cover bg-slate-900 border border-slate-700 shrink-0" onerror="this.outerHTML='<div class=\\\'w-9 h-9 rounded-lg bg-slate-900 border border-slate-700 flex items-center justify-center text-slate-500 shrink-0\\\'>🍷</div>'">`
+      : `<div class="w-9 h-9 rounded-lg bg-slate-900 border border-slate-700 flex items-center justify-center text-slate-500 shrink-0 text-xs">🍷</div>`;
+
     return `
-      <div onclick="agregarAlCarritoPorCodigo('${p.codigo}')" class="p-3 hover:bg-slate-700/70 cursor-pointer flex items-center justify-between">
-        <div>
-          <div class="text-xs font-bold text-white">${p.nombre}</div>
-          <div class="text-[10px] text-slate-400 font-mono">${p.codigo} • Stock: <b class="${st > 0 ? 'text-emerald-400' : 'text-rose-400'}">${st}</b></div>
+      <div onclick="agregarAlCarritoPorCodigo('${p.codigo}')" class="p-2.5 hover:bg-slate-700/70 cursor-pointer flex items-center justify-between gap-2">
+        <div class="flex items-center gap-2.5 min-w-0">
+          ${imgHtml}
+          <div class="min-w-0">
+            <div class="text-xs font-bold text-white truncate">${p.nombre}</div>
+            <div class="text-[10px] text-slate-400 font-mono">${p.codigo} • Stock: <b class="${st > 0 ? 'text-emerald-400' : 'text-rose-400'}">${st}</b></div>
+          </div>
         </div>
-        <div class="text-right font-mono">
+        <div class="text-right font-mono shrink-0">
           <div class="text-xs font-black text-white">${fmtCRC(p.precioVentaCRC)}</div>
           <div class="text-[10px] text-teal-300">${fmtUSD(p.precioVentaUSD)}</div>
         </div>
@@ -1179,6 +1337,7 @@ function agregarAlCarritoPorCodigo(codigo) {
     state.carrito.push({
       codigo: prod.codigo,
       nombre: prod.nombre,
+      imagenUrl: prod.imagenUrl || "",
       precioVentaCRC: Number(prod.precioVentaCRC || 0),
       precioVentaUSD: Number(prod.precioVentaUSD || 0),
       costoRefUSD: Number(prod.costoRefUSD || 0),
@@ -1248,25 +1407,35 @@ function renderizarCarrito() {
       </div>
     `;
   } else {
-    cont.innerHTML = state.carrito.map(item => `
-      <div class="p-2.5 bg-slate-900/90 rounded-xl border border-slate-800 flex items-center justify-between gap-2">
-        <div class="min-w-0 flex-1">
-          <h5 class="text-xs font-bold text-white truncate">${item.nombre}</h5>
-          <div class="text-[11px] text-slate-400 font-mono">${fmtCRC(item.precioVentaCRC)} (${fmtUSD(item.precioVentaUSD)})</div>
-        </div>
+    cont.innerHTML = state.carrito.map(item => {
+      const imgUrl = formatearUrlImagen(item.imagenUrl);
+      const imgHtml = imgUrl
+        ? `<img src="${imgUrl}" alt="${item.nombre}" class="w-8 h-8 rounded-lg object-cover bg-slate-900 border border-slate-700 shrink-0" onerror="this.outerHTML='<div class=\\\'w-8 h-8 rounded-lg bg-slate-900 border border-slate-700 flex items-center justify-center text-slate-500 shrink-0 text-xs\\\'>🍷</div>'">`
+        : `<div class="w-8 h-8 rounded-lg bg-slate-900 border border-slate-700 flex items-center justify-center text-slate-500 shrink-0 text-xs">🍷</div>`;
 
-        <div class="flex items-center gap-1.5 bg-slate-800 rounded-lg p-1">
-          <button onclick="modificarCantidadCarrito('${item.codigo}', -1)" class="w-6 h-6 rounded bg-slate-700 text-white font-bold text-xs flex items-center justify-center active:scale-95">-</button>
-          <span class="text-xs font-bold text-white w-5 text-center font-mono">${item.cantidad}</span>
-          <button onclick="modificarCantidadCarrito('${item.codigo}', 1)" class="w-6 h-6 rounded bg-slate-700 text-white font-bold text-xs flex items-center justify-center active:scale-95">+</button>
-        </div>
+      return `
+        <div class="p-2.5 bg-slate-900/90 rounded-xl border border-slate-800 flex items-center justify-between gap-2">
+          <div class="flex items-center gap-2 min-w-0 flex-1">
+            ${imgHtml}
+            <div class="min-w-0 flex-1">
+              <h5 class="text-xs font-bold text-white truncate">${item.nombre}</h5>
+              <div class="text-[11px] text-slate-400 font-mono">${fmtCRC(item.precioVentaCRC)} (${fmtUSD(item.precioVentaUSD)})</div>
+            </div>
+          </div>
 
-        <div class="text-right min-w-[70px] font-mono">
-          <div class="text-xs font-black text-emerald-400">${fmtCRC(item.cantidad * item.precioVentaCRC)}</div>
-          <button onclick="eliminarDelCarrito('${item.codigo}')" class="text-[10px] text-rose-400 hover:text-rose-300">Quitar</button>
+          <div class="flex items-center gap-1.5 bg-slate-800 rounded-lg p-1">
+            <button onclick="modificarCantidadCarrito('${item.codigo}', -1)" class="w-6 h-6 rounded bg-slate-700 text-white font-bold text-xs flex items-center justify-center active:scale-95">-</button>
+            <span class="text-xs font-bold text-white w-5 text-center font-mono">${item.cantidad}</span>
+            <button onclick="modificarCantidadCarrito('${item.codigo}', 1)" class="w-6 h-6 rounded bg-slate-700 text-white font-bold text-xs flex items-center justify-center active:scale-95">+</button>
+          </div>
+
+          <div class="text-right min-w-[70px] font-mono">
+            <div class="text-xs font-black text-emerald-400">${fmtCRC(item.cantidad * item.precioVentaCRC)}</div>
+            <button onclick="eliminarDelCarrito('${item.codigo}')" class="text-[10px] text-rose-400 hover:text-rose-300">Quitar</button>
+          </div>
         </div>
-      </div>
-    `).join("");
+      `;
+    }).join("");
   }
 
   calcularCambio();
@@ -2026,6 +2195,7 @@ async function exportarLibroExcel() {
     codigo: p.codigo,
     nombre: p.nombre,
     categoria: p.categoria || "",
+    imagenUrl: p.imagenUrl || "",
     precioVentaUSD: p.precioVentaUSD || 0,
     precioVentaCRC: p.precioVentaCRC || 0,
     stockInicial: p.stockInicial || 0,
@@ -2135,6 +2305,7 @@ async function importarArchivoExcel(event) {
                 codigo,
                 nombre: String(r.nombre || r.Nombre || codigo).trim(),
                 categoria: String(r.categoria || r.Categoria || "General").trim(),
+                imagenUrl: String(r.imagenUrl || r.Imagen_URL || r.imagen || r.foto || "").trim(),
                 precioVentaUSD: Number(r.precioVentaUSD || r.PrecioVentaUSD || 0),
                 precioVentaCRC: Number(r.precioVentaCRC || r.PrecioVentaCRC || 0),
                 stockInicial: Number(r.stockInicial || r.StockInicial || 0),
