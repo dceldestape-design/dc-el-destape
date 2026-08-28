@@ -1,0 +1,1105 @@
+<!DOCTYPE html>
+<html lang="es" class="min-h-screen bg-slate-900">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>DC El Destape - Control de Inventario y Ventas</title>
+  
+  <!-- PWA Meta Tags & Executive Logo Favicon -->
+  <meta name="theme-color" content="#0a0d14">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="El Destape">
+  <link rel="icon" type="image/png" href="logo.png">
+  <link rel="apple-touch-icon" href="logo.png">
+  <link rel="manifest" href="manifest.json">
+
+  <!-- Tailwind CSS & Fonts -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+              800: '#3730a3',
+              900: '#312e81',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=IBM+Plex+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- HTML5 QR / Barcode Scanner -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+
+  <!-- XLSX Library for Excel Import/Export -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+  <!-- Canvas Confetti for sales celebration -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+  <link rel="stylesheet" href="styles.css?v=20260828_1">
+</head>
+<body class="min-h-screen font-['Plus_Jakarta_Sans'] text-slate-100 antialiased select-none overflow-x-hidden" style="padding-bottom: 200px !important;">
+
+  <!-- TOP APP BAR -->
+  <header class="sticky top-0 z-40 bg-slate-900/95 backdrop-blur-md border-b border-slate-800/90 px-3.5 py-2.5 flex items-center justify-between">
+    <div class="flex items-center gap-2.5">
+      <div class="w-10 h-10 rounded-full border border-amber-500/60 p-0.5 bg-black shadow-md shadow-amber-500/20 shrink-0 overflow-hidden">
+        <img src="logo.png" alt="DC El Destape" class="w-full h-full object-cover rounded-full">
+      </div>
+      <div>
+        <div class="flex items-center gap-1.5">
+          <h1 id="appHeaderTitle" class="text-xs font-black text-white leading-tight uppercase tracking-wider">DC El Destape</h1>
+          <span class="text-[9px] font-black text-amber-300 bg-amber-950/80 border border-amber-500/40 px-1.5 py-0.2 rounded-md uppercase">Licores</span>
+        </div>
+        <div class="flex items-center gap-2 mt-0.5">
+          <!-- Vendedor Switcher Chip -->
+          <button onclick="abrirModalSeleccionVendedor()" id="btnHeaderVendedor" title="Cambiar Vendedor" class="flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-indigo-950/80 border border-indigo-500/40 hover:border-indigo-400 text-[11px] font-bold text-indigo-300 shadow-sm active:scale-95 transition-all">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+            <span id="headerVendedorNombre">Carlos</span>
+            <i data-lucide="chevron-down" class="w-3 h-3 text-slate-400"></i>
+          </button>
+          <span class="text-[10px] text-slate-500 font-mono">| TC: ₡<span id="headerExchangeRate">520</span></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quick actions: Settings, Excel Export & Sync -->
+    <div class="flex items-center gap-1.5">
+      <button onclick="cambiarVista('configuracion')" title="Ajustes y Configuración" class="p-2 rounded-xl bg-slate-800 text-slate-300 hover:text-white active:scale-95 transition-all border border-slate-700/60">
+        <i data-lucide="settings" class="w-4 h-4"></i>
+      </button>
+      <button onclick="exportarLibroExcel()" title="Descargar Excel" class="p-2 rounded-xl bg-emerald-950/60 text-emerald-400 hover:bg-emerald-900 border border-emerald-500/30 active:scale-95 transition-all">
+        <i data-lucide="file-spreadsheet" class="w-4 h-4"></i>
+      </button>
+      <button id="btnSync" onclick="procesarColaSincronizacion(true)" title="Sincronizar con Google Sheets" class="relative p-2 rounded-xl bg-slate-800 text-slate-300 hover:text-white active:scale-95 transition-all border border-slate-700/60">
+        <i data-lucide="refresh-cw" class="w-4 h-4" id="syncIcon"></i>
+        <span id="syncPendingBadge" class="hidden absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 bg-amber-500 text-slate-950 font-black text-[10px] rounded-full shadow-lg flex items-center justify-center animate-pulse">0</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- OFFLINE / SYNC STATUS BANNER -->
+  <div id="offlineSyncBanner" class="hidden max-w-md mx-auto px-3.5 py-1.5 mt-2 bg-amber-950/80 border border-amber-500/40 rounded-xl text-amber-200 text-xs font-bold flex items-center justify-between shadow-lg">
+    <div class="flex items-center gap-2">
+      <span class="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
+      <span id="offlineSyncText">Modo Offline: Cambios guardados localmente</span>
+    </div>
+    <button onclick="procesarColaSincronizacion(true)" class="px-2 py-0.5 bg-amber-500 text-slate-950 text-[10px] font-black rounded-md hover:bg-amber-400 active:scale-95 transition-all">
+      Subir ahora
+    </button>
+  </div>
+
+  <!-- NOTIFICATION TOAST -->
+  <div id="toast" class="fixed top-16 left-1/2 -translate-x-1/2 z-50 transition-all duration-300 transform -translate-y-20 opacity-0 pointer-events-none max-w-[90vw] w-auto">
+    <div class="px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-3 text-sm font-medium border" id="toastBox">
+      <i data-lucide="info" class="w-5 h-5 shrink-0" id="toastIcon"></i>
+      <span id="toastMsg">Mensaje</span>
+    </div>
+  </div>
+
+  <!-- MAIN VIEWS CONTAINER -->
+  <main class="max-w-md mx-auto p-4 pb-36 space-y-4">
+
+    <!-- ============================================================== -->
+    <!-- VIEW 1: DASHBOARD (RESUMEN BI-MONETARIO)                      -->
+    <!-- ============================================================== -->
+    <section id="viewDashboard" class="space-y-3.5 active-view">
+      
+      <!-- Executive Brand Banner Card -->
+      <div class="bg-gradient-to-r from-slate-900 via-slate-800/90 to-slate-900 border border-amber-500/30 rounded-3xl p-3 shadow-xl flex items-center justify-between relative overflow-hidden">
+        <div class="absolute -right-5 -bottom-5 w-24 h-24 bg-amber-500/10 rounded-full blur-xl pointer-events-none"></div>
+        <div class="flex items-center gap-3 relative z-10">
+          <div class="w-12 h-12 rounded-full border border-amber-400/60 p-0.5 bg-black shadow-md shadow-amber-500/20 shrink-0">
+            <img src="logo.png" alt="DC El Destape" class="w-full h-full object-cover rounded-full">
+          </div>
+          <div>
+            <div class="flex items-center gap-1.5">
+              <h2 class="text-sm font-black text-white tracking-wide">DC EL DESTAPE</h2>
+              <span class="text-[9px] font-black uppercase px-1.5 py-0.2 rounded-md bg-amber-400/20 text-amber-300 border border-amber-400/40 font-mono">Licores</span>
+            </div>
+            <p class="text-[11px] text-slate-400 font-medium">Control Ejecutivo • Carlos & Daniel</p>
+            <div class="text-[10px] text-amber-400/90 font-mono font-bold flex items-center gap-1 mt-0.5">
+              <i data-lucide="phone" class="w-3 h-3 text-amber-400"></i>
+              <span>+506 8992-7936</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Metrics Overview Cards (Dual USD & CRC) -->
+      <div class="grid grid-cols-2 gap-3">
+        
+        <!-- Metric 1: Valor a Costo -->
+        <div class="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/80 rounded-2xl p-3.5 relative overflow-hidden shadow-lg">
+          <div class="flex items-center justify-between text-slate-400 mb-1">
+            <span class="text-[10px] font-bold uppercase tracking-wider">Valor a Costo</span>
+            <i data-lucide="calculator" class="w-3.5 h-3.5 text-slate-400"></i>
+          </div>
+          <div class="text-base font-black text-white font-mono" id="dashCostoUSD">$0.00</div>
+          <div class="text-xs text-slate-400 font-mono" id="dashCostoCRC">₡0</div>
+        </div>
+
+        <!-- Metric 2: Valor a Precio Venta -->
+        <div class="bg-gradient-to-br from-teal-950/40 to-slate-900 border border-teal-500/30 rounded-2xl p-3.5 relative overflow-hidden shadow-lg">
+          <div class="flex items-center justify-between text-teal-400 mb-1">
+            <span class="text-[10px] font-bold uppercase tracking-wider">Valor a Venta</span>
+            <i data-lucide="trending-up" class="w-3.5 h-3.5"></i>
+          </div>
+          <div class="text-base font-black text-teal-300 font-mono" id="dashVentaUSD">$0.00</div>
+          <div class="text-xs text-slate-400 font-mono" id="dashVentaCRC">₡0</div>
+        </div>
+
+        <!-- Metric 3: Margen Potencial -->
+        <div class="bg-gradient-to-br from-amber-950/40 to-slate-900 border border-amber-500/30 rounded-2xl p-3.5 relative overflow-hidden shadow-lg">
+          <div class="flex items-center justify-between text-amber-400 mb-1">
+            <span class="text-[10px] font-bold uppercase tracking-wider">Margen Potencial</span>
+            <i data-lucide="badge-percent" class="w-3.5 h-3.5"></i>
+          </div>
+          <div class="text-base font-black text-amber-300 font-mono" id="dashMargenUSD">$0.00</div>
+          <div class="text-xs text-slate-400 font-mono" id="dashMargenCRC">₡0</div>
+        </div>
+
+        <!-- Metric 4: Existencias y Unidades -->
+        <div class="bg-gradient-to-br from-indigo-950/40 to-slate-900 border border-indigo-500/30 rounded-2xl p-3.5 relative overflow-hidden shadow-lg">
+          <div class="flex items-center justify-between text-indigo-400 mb-1">
+            <span class="text-[10px] font-bold uppercase tracking-wider">Existencias</span>
+            <i data-lucide="boxes" class="w-3.5 h-3.5"></i>
+          </div>
+          <div class="text-base font-black text-white font-mono"><span id="dashTotalUnidades">0</span> <span class="text-xs font-normal text-slate-400">unids</span></div>
+          <div class="text-xs text-slate-400 font-mono"><span id="dashProdsConStock">0</span> con stock</div>
+        </div>
+      </div>
+
+      <!-- Quick Actions Bar -->
+      <div class="grid grid-cols-3 gap-2">
+        <button onclick="cambiarVista('ventas')" class="flex flex-col items-center justify-center p-3 rounded-2xl bg-gradient-to-b from-indigo-600 to-indigo-700 text-white shadow-lg shadow-indigo-600/30 active:scale-95 transition-all">
+          <i data-lucide="shopping-cart" class="w-5 h-5 mb-1.5"></i>
+          <span class="text-xs font-bold">Venta Rápida</span>
+        </button>
+        <button onclick="cambiarVista('compras')" class="flex flex-col items-center justify-center p-3 rounded-2xl bg-slate-800 border border-slate-700 text-slate-200 active:scale-95 transition-all hover:bg-slate-750">
+          <i data-lucide="truck" class="w-5 h-5 mb-1.5 text-emerald-400"></i>
+          <span class="text-xs font-bold">Entrada / Compra</span>
+        </button>
+        <button onclick="abrirModalProducto()" class="flex flex-col items-center justify-center p-3 rounded-2xl bg-slate-800 border border-slate-700 text-slate-200 active:scale-95 transition-all hover:bg-slate-750">
+          <i data-lucide="plus-circle" class="w-5 h-5 mb-1.5 text-amber-400"></i>
+          <span class="text-xs font-bold">Nuevo Licor</span>
+        </button>
+      </div>
+
+      <!-- Out of Stock / Low Stock Banner -->
+      <div id="stockAlertsContainer" class="hidden bg-rose-950/40 border border-rose-500/30 rounded-2xl p-3.5">
+        <div class="flex items-center justify-between text-rose-400 font-bold text-xs mb-2">
+          <span class="flex items-center gap-1.5">
+            <i data-lucide="alert-triangle" class="w-4 h-4"></i>
+            SIN EXISTENCIA (<span id="lowStockCount">0</span>)
+          </span>
+        </div>
+        <div id="stockAlertsList" class="text-xs font-mono text-slate-300 leading-relaxed max-h-24 overflow-y-auto"></div>
+      </div>
+
+      <!-- Recent Sales / Activity -->
+      <div class="bg-slate-800/60 border border-slate-800 rounded-2xl p-4">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Últimos Movimientos</h2>
+          <button onclick="cambiarVista('ventas')" class="text-xs text-indigo-400 font-semibold hover:underline">Ver TPV</button>
+        </div>
+        <div id="dashRecentSales" class="divide-y divide-slate-750/60 space-y-2">
+          <!-- Rendered by JS -->
+        </div>
+      </div>
+
+      <!-- Extra spacer for mobile bottom navigation -->
+      <div style="height: 120px; width: 100%;" class="w-full block"></div>
+    </section>
+
+    <!-- ============================================================== -->
+    <!-- VIEW 2: PRODUCTOS / CATÁLOGO                                   -->
+    <!-- ============================================================== -->
+    <section id="viewInventario" class="space-y-3 hidden">
+      
+      <!-- Multi-Seller View Switcher Tab (Carlos / Daniel / Consolidado) -->
+      <div class="grid grid-cols-3 gap-1 bg-slate-950/80 p-1 rounded-2xl border border-slate-800 text-xs font-bold font-mono">
+        <button id="tabVendedor-Carlos" onclick="cambiarVistaVendedor('Carlos')" class="py-2 rounded-xl bg-indigo-600 text-white shadow-md flex items-center justify-center gap-1 active:scale-95 transition-all">
+          <span class="w-2 h-2 rounded-full bg-blue-400"></span>
+          <span>Carlos</span>
+        </button>
+        <button id="tabVendedor-Daniel" onclick="cambiarVistaVendedor('Daniel')" class="py-2 rounded-xl bg-transparent text-slate-400 hover:text-white flex items-center justify-center gap-1 active:scale-95 transition-all">
+          <span class="w-2 h-2 rounded-full bg-violet-400"></span>
+          <span>Daniel</span>
+        </button>
+        <button id="tabVendedor-Consolidado" onclick="cambiarVistaVendedor('Consolidado')" class="py-2 rounded-xl bg-transparent text-slate-400 hover:text-white flex items-center justify-center gap-1 active:scale-95 transition-all">
+          <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+          <span>Total</span>
+        </button>
+      </div>
+
+      <!-- Search & Barcode Scan Bar -->
+      <div class="flex items-center gap-2">
+        <div class="relative flex-1">
+          <i data-lucide="search" class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"></i>
+          <input type="text" id="searchInventory" oninput="filtrarInventario()" placeholder="Buscar por nombre, código o categoría..." class="w-full pl-10 pr-4 py-2.5 bg-slate-800/90 border border-slate-700/80 rounded-2xl text-sm text-white placeholder-slate-400 focus:outline-none focus:border-indigo-500 transition-all">
+        </div>
+        <button onclick="abrirEscaner('buscar')" title="Escanear Código" class="p-2.5 bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white rounded-2xl shadow-lg shadow-indigo-600/30 transition-all">
+          <i data-lucide="scan-barcode" class="w-5 h-5"></i>
+        </button>
+        <button onclick="abrirModalProducto()" title="Agregar Licor" class="p-2.5 bg-slate-800 border border-slate-700 text-slate-200 rounded-2xl active:scale-95 transition-all">
+          <i data-lucide="plus" class="w-5 h-5"></i>
+        </button>
+      </div>
+      <!-- Quick Stock Filter Chips (Todos / Con Stock / Agotados) -->
+      <div class="grid grid-cols-3 gap-1.5 text-[11px] font-bold font-mono">
+        <button id="filterStock-todos" onclick="filtrarEstadoStock('todos')" class="py-1.5 px-2 rounded-xl bg-indigo-600 text-white text-center border border-indigo-500/40 shadow-sm active:scale-95 transition-all">
+          Todos (<span id="countStockTodos">0</span>)
+        </button>
+        <button id="filterStock-constock" onclick="filtrarEstadoStock('constock')" class="py-1.5 px-2 rounded-xl bg-slate-800 text-emerald-400 text-center border border-slate-700 shadow-sm active:scale-95 transition-all">
+          📦 Stock (<span id="countStockCon">0</span>)
+        </button>
+        <button id="filterStock-agotados" onclick="filtrarEstadoStock('agotados')" class="py-1.5 px-2 rounded-xl bg-slate-800 text-rose-400 text-center border border-slate-700 shadow-sm active:scale-95 transition-all">
+          🚫 Agotados (<span id="countStockSin">0</span>)
+        </button>
+      </div>
+
+      <!-- Categories Filter Pills Bar -->
+      <div id="categoryPills" class="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar text-xs font-medium">
+        <button onclick="filtrarCategoria('Todas')" class="cat-pill active px-3 py-1.5 rounded-full shrink-0">Todas</button>
+      </div>
+
+      <!-- Filter count and Sort -->
+      <div class="flex items-center justify-between text-xs text-slate-400 px-1">
+        <span>Catálogo (<span id="inventarioVendedorLabel" class="text-indigo-400 font-bold">Carlos</span>): <b id="prodCount" class="text-white">0</b></span>
+        <button onclick="ordenarProductos()" class="flex items-center gap-1 hover:text-white font-medium">
+          <i data-lucide="arrow-up-down" class="w-3.5 h-3.5"></i>
+          <span id="sortLabel">A-Z</span>
+        </button>
+      </div>
+
+      <!-- Products Grid -->
+      <div id="productsList" class="space-y-2.5">
+        <!-- Rendered by JS -->
+      </div>
+
+      <!-- Extra spacer for mobile bottom navigation -->
+      <div style="height: 120px; width: 100%;" class="w-full block"></div>
+    </section>
+
+    <!-- ============================================================== -->
+    <!-- VIEW 3: COMPRAS / ENTRADAS (REABASTECIMIENTO)                  -->
+    <!-- ============================================================== -->
+    <section id="viewCompras" class="space-y-4 hidden">
+      <div class="bg-slate-800/90 border border-slate-700/80 rounded-2xl p-4 space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-700 pb-3">
+          <h2 class="text-sm font-bold text-white flex items-center gap-2">
+            <i data-lucide="truck" class="w-4 h-4 text-emerald-400"></i>
+            Registrar Compra / Entrada
+          </h2>
+          <button onclick="abrirEscaner('compra')" class="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 rounded-xl text-xs font-bold active:scale-95">
+            <i data-lucide="scan-barcode" class="w-3.5 h-3.5"></i>
+            Escanear
+          </button>
+        </div>
+
+        <div class="space-y-3 text-xs">
+          <!-- Vendedor Asignado a la compra -->
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block font-semibold text-slate-300 mb-1">Asignar Stock A *</label>
+              <select id="compraVendedor" class="w-full px-2.5 py-2.5 bg-slate-900 border border-indigo-500/40 rounded-xl text-white font-bold text-xs focus:outline-none focus:border-indigo-400">
+                <option value="Carlos">👤 Carlos</option>
+                <option value="Daniel">👤 Daniel</option>
+              </select>
+            </div>
+            <div>
+              <label class="block font-semibold text-slate-300 mb-1">¿Quién Pagó / Financió? *</label>
+              <select id="compraFinanciadoPor" class="w-full px-2.5 py-2.5 bg-slate-900 border border-emerald-500/40 rounded-xl text-white font-bold text-xs focus:outline-none focus:border-emerald-400">
+                <option value="Carlos">👤 Carlos (Dinero propio)</option>
+                <option value="Daniel">👤 Daniel (Dinero propio)</option>
+                <option value="Empresa">🏢 Empresa (Caja General)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Product Selector -->
+          <div>
+            <label class="block font-semibold text-slate-300 mb-1">Seleccionar Producto *</label>
+            <select id="compraProductoSelect" onchange="seleccionarProductoCompra()" class="w-full px-3 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-emerald-500">
+              <option value="">-- Seleccionar de la lista --</option>
+            </select>
+          </div>
+
+          <!-- Date & Quantity -->
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block font-semibold text-slate-300 mb-1">Fecha</label>
+              <input type="date" id="compraFecha" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white font-mono">
+            </div>
+            <div>
+              <label class="block font-semibold text-slate-300 mb-1">Cantidad *</label>
+              <input type="number" id="compraCantidad" min="1" value="1" oninput="calcularTotalCompra()" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white font-mono font-bold">
+            </div>
+          </div>
+
+          <!-- Costs and Exchange Rate -->
+          <div class="grid grid-cols-3 gap-2">
+            <div>
+              <label class="block font-semibold text-slate-300 mb-1">Costo USD ($)</label>
+              <input type="number" step="0.01" id="compraCostoUSD" value="0" oninput="autoConvertirCompraCosto('USD')" class="w-full px-2.5 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white font-mono font-bold text-xs">
+            </div>
+            <div>
+              <label class="block font-semibold text-slate-300 mb-1">Costo CRC (₡)</label>
+              <input type="number" step="1" id="compraCostoCRC" value="0" oninput="autoConvertirCompraCosto('CRC')" class="w-full px-2.5 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white font-mono font-bold text-xs">
+            </div>
+            <div>
+              <label class="block font-semibold text-slate-300 mb-1">Tipo Cambio (₡)</label>
+              <input type="number" step="1" id="compraTipoCambio" value="520" oninput="calcularTotalCompra()" class="w-full px-2.5 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white font-mono font-bold text-xs">
+            </div>
+          </div>
+
+          <!-- Total Calculation -->
+          <div class="p-3 bg-slate-900 rounded-xl border border-emerald-500/30 flex items-center justify-between font-mono">
+            <span class="text-slate-300 font-semibold text-xs">Inversión Total:</span>
+            <div class="text-right">
+              <div class="text-sm font-black text-emerald-400" id="compraTotalCRCDisplay">₡0</div>
+              <div class="text-xs text-slate-400" id="compraTotalUSDDisplay">$0.00 USD</div>
+            </div>
+          </div>
+
+          <!-- Supplier / Notes -->
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block font-semibold text-slate-300 mb-1">Proveedor (Opcional)</label>
+              <input type="text" id="compraProveedor" placeholder="Ej. Distribuidora" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white">
+            </div>
+            <div>
+              <label class="block font-semibold text-slate-300 mb-1">Notas / Factura</label>
+              <input type="text" id="compraNotas" placeholder="Ej. Fact #1029" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white">
+            </div>
+          </div>
+
+          <button onclick="guardarCompra()" class="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-lg shadow-emerald-600/30 active:scale-95 transition-all flex items-center justify-center gap-2 text-sm">
+            <i data-lucide="check-circle" class="w-5 h-5"></i>
+            Guardar Compra en Inventario
+          </button>
+        </div>
+      </div>
+
+      <!-- Recent Purchases List -->
+      <div class="bg-slate-800/60 border border-slate-800 rounded-2xl p-4">
+        <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Historial de Compras (<span id="comprasCount">0</span>)</h3>
+        <div id="comprasHistorialList" class="space-y-2 text-xs">
+          <!-- Rendered by JS -->
+        </div>
+      </div>
+
+      <!-- Extra spacer for mobile bottom navigation -->
+      <div style="height: 120px; width: 100%;" class="w-full block"></div>
+    </section>
+
+    <!-- ============================================================== -->
+    <!-- VIEW 4: VENTAS / PUNTO DE VENTA (POS TÁCTIL)                   -->
+    <!-- ============================================================== -->
+    <section id="viewVentas" class="space-y-3 hidden">
+      
+      <!-- Top Action: Quick Search & Scan -->
+      <div class="flex items-center gap-2">
+        <div class="relative flex-1">
+          <i data-lucide="search" class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"></i>
+          <input type="text" id="searchPos" oninput="filtrarPosProductos()" placeholder="Agregar licor a la venta..." class="w-full pl-10 pr-4 py-2.5 bg-slate-800 border border-slate-700 rounded-2xl text-sm text-white placeholder-slate-400 focus:outline-none focus:border-indigo-500">
+        </div>
+        <button onclick="abrirEscaner('venta')" class="px-3.5 py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-2xl shadow-lg shadow-indigo-600/30 font-bold text-xs flex items-center gap-1.5 active:scale-95 transition-all">
+          <i data-lucide="scan-barcode" class="w-5 h-5"></i>
+          <span>Escanear</span>
+        </button>
+      </div>
+
+      <!-- Dropdown Quick Search Results -->
+      <div id="posSearchResults" class="hidden max-h-52 overflow-y-auto bg-slate-800 border border-indigo-500/40 rounded-2xl divide-y divide-slate-700/60 shadow-2xl"></div>
+
+      <!-- Active Seller POS Banner -->
+      <div class="flex items-center justify-between p-2.5 bg-indigo-950/40 border border-indigo-500/30 rounded-2xl text-xs">
+        <div class="flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span class="text-slate-300">Vendedor:</span>
+          <span id="posVendedorNombre" class="font-bold text-white font-mono bg-indigo-900/60 px-2 py-0.5 rounded-lg border border-indigo-500/40">Carlos</span>
+        </div>
+        <button onclick="abrirModalSeleccionVendedor()" class="text-[11px] text-indigo-400 hover:text-indigo-300 font-bold hover:underline">Cambiar 👤</button>
+      </div>
+
+      <!-- Sale Cart Card -->
+      <div class="bg-slate-800/90 border border-slate-700/80 rounded-2xl p-3.5 space-y-3">
+        <div class="flex items-center justify-between border-b border-slate-700/70 pb-2">
+          <div class="flex items-center gap-2">
+            <i data-lucide="shopping-bag" class="w-4 h-4 text-indigo-400"></i>
+            <h3 class="text-xs font-bold uppercase tracking-wider text-slate-200">Carrito de Venta (<span id="cartCount">0</span>)</h3>
+          </div>
+          <button onclick="vaciarCarrito()" class="text-xs text-rose-400 hover:text-rose-300 font-semibold">Vaciar</button>
+        </div>
+
+        <!-- Cart Items Container -->
+        <div id="cartItemsList" class="space-y-2 min-h-[90px] max-h-[220px] overflow-y-auto">
+          <!-- Rendered by JS -->
+        </div>
+
+        <!-- Cart Totals (Dual Currency) -->
+        <div class="pt-3 border-t border-slate-700 space-y-2">
+          <div class="flex items-baseline justify-between">
+            <span class="text-xs font-bold text-slate-300">TOTAL A COBRAR:</span>
+            <div class="text-right">
+              <div class="text-2xl font-black text-white font-mono" id="cartTotalCRC">₡0</div>
+              <div class="text-xs font-bold text-slate-400 font-mono" id="cartTotalUSD">$0.00 USD</div>
+            </div>
+          </div>
+
+          <!-- Payment Methods -->
+          <div class="grid grid-cols-3 gap-1.5 pt-1 text-xs">
+            <button type="button" onclick="setPaymentMethod('Efectivo')" class="pay-btn active p-2 rounded-xl bg-indigo-600 text-white font-bold text-center border border-transparent">
+              💵 Efectivo
+            </button>
+            <button type="button" onclick="setPaymentMethod('SINPE / Transf.')" class="pay-btn p-2 rounded-xl bg-slate-900 text-slate-300 font-medium text-center border border-slate-700">
+              📱 SINPE / Transf.
+            </button>
+            <button type="button" onclick="setPaymentMethod('Tarjeta')" class="pay-btn p-2 rounded-xl bg-slate-900 text-slate-300 font-medium text-center border border-slate-700">
+              💳 Tarjeta
+            </button>
+          </div>
+
+          <!-- Cash Change Calculator -->
+          <div id="cashHelper" class="pt-1 grid grid-cols-2 gap-2 text-xs">
+            <div>
+              <label class="text-slate-400 block mb-0.5">Paga con (₡ Colones):</label>
+              <input type="number" id="cashReceived" oninput="calcularCambio()" placeholder="0" class="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-white font-mono font-bold">
+            </div>
+            <div>
+              <label class="text-slate-400 block mb-0.5">Cambio / Vuelto:</label>
+              <div id="cashChange" class="w-full px-2.5 py-1.5 bg-slate-900/60 border border-slate-700/60 rounded-lg text-emerald-400 font-mono font-black">₡0</div>
+            </div>
+          </div>
+
+          <!-- Customer Input -->
+          <input type="text" id="customerName" placeholder="Nombre del cliente (Opcional)" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500">
+
+          <!-- Checkout Action Button -->
+          <button onclick="completarVenta()" id="btnCheckout" class="w-full py-3.5 bg-gradient-to-r from-emerald-500 to-teal-600 text-white text-sm font-extrabold rounded-xl shadow-lg shadow-emerald-500/25 active:scale-95 transition-all flex items-center justify-center gap-2">
+            <i data-lucide="check" class="w-5 h-5"></i>
+            <span>COMPLETAR VENTA</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Extra spacer for mobile bottom navigation -->
+      <div style="height: 120px; width: 100%;" class="w-full block"></div>
+    </section>
+
+    <!-- ============================================================== -->
+    <!-- VIEW 5: FINANZAS Y MANEJO DE CUENTAS (EMPRESA, CARLOS, DANIEL) -->
+    <!-- ============================================================== -->
+    <section id="viewFinanzas" class="space-y-3.5 hidden">
+      
+      <!-- Top Financial Summary Cards -->
+      <div class="space-y-2.5">
+        
+        <!-- Card 1: Caja Empresa (Fondo Disponible) -->
+        <div class="bg-gradient-to-br from-emerald-950/70 via-slate-900 to-slate-900 border border-emerald-500/40 rounded-3xl p-4 shadow-xl relative overflow-hidden">
+          <div class="absolute -right-6 -bottom-6 w-28 h-28 bg-emerald-500/10 rounded-full blur-xl pointer-events-none"></div>
+          <div class="flex items-center justify-between mb-1.5 relative z-10">
+            <div class="flex items-center gap-2">
+              <div class="w-8 h-8 rounded-xl bg-emerald-600/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
+                <i data-lucide="building-2" class="w-4 h-4"></i>
+              </div>
+              <div>
+                <h3 class="text-xs font-black uppercase tracking-wider text-white">Caja Empresa (DC El Destape)</h3>
+                <span class="text-[10px] text-emerald-300/80 font-medium">Dinero real disponible</span>
+              </div>
+            </div>
+            <span class="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-mono font-bold">Disponible</span>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2 pt-2 border-t border-slate-800/80 relative z-10 font-mono">
+            <div>
+              <div class="text-[10px] text-slate-400 uppercase font-sans font-bold">Saldo en Colones</div>
+              <div class="text-lg font-black text-emerald-400" id="finSaldoEmpresaCRC">₡0</div>
+            </div>
+            <div class="text-right">
+              <div class="text-[10px] text-slate-400 uppercase font-sans font-bold">Saldo en Dólares</div>
+              <div class="text-base font-black text-white" id="finSaldoEmpresaUSD">$0.00 USD</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Socios Grid: Cuenta Carlos & Cuenta Daniel -->
+        <div class="grid grid-cols-2 gap-2.5">
+          
+          <!-- Card 2: Cuenta Carlos -->
+          <div class="bg-gradient-to-br from-slate-900 to-slate-950 border border-blue-500/30 rounded-2xl p-3 shadow-lg space-y-2 relative overflow-hidden">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-1.5">
+                <span class="w-6 h-6 rounded-lg bg-blue-600/20 border border-blue-500/40 flex items-center justify-center text-blue-400 font-black text-xs">C</span>
+                <span class="text-xs font-black text-white">Carlos</span>
+              </div>
+              <span class="text-[9px] font-bold text-blue-300 bg-blue-950/60 px-1.5 py-0.2 rounded border border-blue-500/30">Socio</span>
+            </div>
+
+            <div class="font-mono">
+              <div class="text-[10px] text-slate-400">Deuda que se le debe:</div>
+              <div class="text-sm font-black text-blue-400" id="finDeudaCarlosCRC">₡0</div>
+              <div class="text-[10px] text-slate-500" id="finDeudaCarlosUSD">($0.00 USD)</div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-1 pt-1">
+              <button onclick="abrirModalMovimientoDinero('aporte_capital', 'Carlos')" class="py-1 px-1.5 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/30 rounded-lg text-[10px] font-bold text-blue-300 active:scale-95 text-center transition-all">
+                + Aporte
+              </button>
+              <button onclick="abrirModalMovimientoDinero('pago_socio', 'Carlos')" class="py-1 px-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 rounded-lg text-[10px] font-bold text-emerald-300 active:scale-95 text-center transition-all">
+                💸 Pagar
+              </button>
+            </div>
+          </div>
+
+          <!-- Card 3: Cuenta Daniel -->
+          <div class="bg-gradient-to-br from-slate-900 to-slate-950 border border-violet-500/30 rounded-2xl p-3 shadow-lg space-y-2 relative overflow-hidden">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-1.5">
+                <span class="w-6 h-6 rounded-lg bg-violet-600/20 border border-violet-500/40 flex items-center justify-center text-violet-400 font-black text-xs">D</span>
+                <span class="text-xs font-black text-white">Daniel</span>
+              </div>
+              <span class="text-[9px] font-bold text-violet-300 bg-violet-950/60 px-1.5 py-0.2 rounded border border-violet-500/30">Socio</span>
+            </div>
+
+            <div class="font-mono">
+              <div class="text-[10px] text-slate-400">Deuda que se le debe:</div>
+              <div class="text-sm font-black text-violet-400" id="finDeudaDanielCRC">₡0</div>
+              <div class="text-[10px] text-slate-500" id="finDeudaDanielUSD">($0.00 USD)</div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-1 pt-1">
+              <button onclick="abrirModalMovimientoDinero('aporte_capital', 'Daniel')" class="py-1 px-1.5 bg-violet-600/20 hover:bg-violet-600/30 border border-violet-500/30 rounded-lg text-[10px] font-bold text-violet-300 active:scale-95 text-center transition-all">
+                + Aporte
+              </button>
+              <button onclick="abrirModalMovimientoDinero('pago_socio', 'Daniel')" class="py-1 px-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 rounded-lg text-[10px] font-bold text-emerald-300 active:scale-95 text-center transition-all">
+                💸 Pagar
+              </button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Quick Action Buttons -->
+      <div class="grid grid-cols-3 gap-2 text-xs font-bold">
+        <button onclick="abrirModalMovimientoDinero('aporte_capital')" class="py-2.5 px-2 bg-slate-800/90 hover:bg-slate-800 border border-blue-500/30 text-blue-300 rounded-2xl flex flex-col items-center justify-center gap-1 active:scale-95 shadow-md transition-all">
+          <i data-lucide="plus-circle" class="w-4 h-4 text-blue-400"></i>
+          <span class="text-[11px]">Inyectar Aporte</span>
+        </button>
+        <button onclick="abrirModalMovimientoDinero('pago_socio')" class="py-2.5 px-2 bg-slate-800/90 hover:bg-slate-800 border border-emerald-500/30 text-emerald-300 rounded-2xl flex flex-col items-center justify-center gap-1 active:scale-95 shadow-md transition-all">
+          <i data-lucide="arrow-up-right" class="w-4 h-4 text-emerald-400"></i>
+          <span class="text-[11px]">Pagar a Socio</span>
+        </button>
+        <button onclick="abrirModalMovimientoDinero('gasto_operativo')" class="py-2.5 px-2 bg-slate-800/90 hover:bg-slate-800 border border-rose-500/30 text-rose-300 rounded-2xl flex flex-col items-center justify-center gap-1 active:scale-95 shadow-md transition-all">
+          <i data-lucide="receipt" class="w-4 h-4 text-rose-400"></i>
+          <span class="text-[11px]">Gasto Empresa</span>
+        </button>
+      </div>
+
+      <!-- Financial Ledger (Historial de Movimientos de Dinero) -->
+      <div class="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-3.5 space-y-3">
+        <div class="flex items-center justify-between border-b border-slate-700 pb-2.5">
+          <h3 class="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+            <i data-lucide="history" class="w-4 h-4 text-indigo-400"></i>
+            <span>Historial de Dinero (<span id="finMovimientosCount">0</span>)</span>
+          </h3>
+        </div>
+
+        <!-- Filter pills -->
+        <div class="grid grid-cols-4 gap-1 text-[10px] font-bold font-mono">
+          <button id="finFilter-todos" onclick="filtrarHistorialFinanzas('todos')" class="py-1 rounded-lg bg-indigo-600 text-white text-center">Todos</button>
+          <button id="finFilter-empresa" onclick="filtrarHistorialFinanzas('Empresa')" class="py-1 rounded-lg bg-slate-900 text-slate-400 hover:text-white text-center">Empresa</button>
+          <button id="finFilter-carlos" onclick="filtrarHistorialFinanzas('Carlos')" class="py-1 rounded-lg bg-slate-900 text-slate-400 hover:text-white text-center">Carlos</button>
+          <button id="finFilter-daniel" onclick="filtrarHistorialFinanzas('Daniel')" class="py-1 rounded-lg bg-slate-900 text-slate-400 hover:text-white text-center">Daniel</button>
+        </div>
+
+        <div id="finMovimientosList" class="space-y-2 text-xs max-h-[380px] overflow-y-auto">
+          <!-- Rendered by JS -->
+        </div>
+      </div>
+
+      <!-- Extra spacer for mobile bottom navigation -->
+      <div style="height: 120px; width: 100%;" class="w-full block"></div>
+    </section>
+
+    <!-- ============================================================== -->
+    <!-- VIEW 6: IMPORTAR / EXPORTAR EXCEL Y CONFIGURACIÓN              -->
+    <!-- ============================================================== -->
+    <section id="viewConfiguracion" class="space-y-4 hidden">
+      
+      <!-- Excel Import / Export Hub -->
+      <div class="bg-gradient-to-br from-emerald-950/40 to-slate-900 border border-emerald-500/30 rounded-2xl p-4 space-y-3">
+        <div class="flex items-center gap-2 text-emerald-400">
+          <i data-lucide="file-spreadsheet" class="w-5 h-5"></i>
+          <h2 class="text-sm font-bold text-white">Centro de Importación y Exportación Excel</h2>
+        </div>
+        <p class="text-xs text-slate-400 leading-relaxed">
+          Descarga o sube tu archivo Excel (.xlsx) con hojas <b>Productos</b>, <b>Compras</b> y <b>Ventas</b>.
+        </p>
+
+        <div class="grid grid-cols-2 gap-2 pt-1">
+          <button onclick="exportarLibroExcel()" class="py-2.5 px-3 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl active:scale-95 transition-all flex items-center justify-center gap-1.5">
+            <i data-lucide="download" class="w-4 h-4"></i>
+            Descargar Excel
+          </button>
+          <label class="py-2.5 px-3 bg-slate-800 hover:bg-slate-750 border border-slate-700 text-slate-200 text-xs font-bold rounded-xl active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer text-center">
+            <i data-lucide="upload" class="w-4 h-4 text-emerald-400"></i>
+            <span>Subir Excel</span>
+            <input type="file" accept=".xlsx,.xls,.csv" onchange="importarArchivoExcel(event)" class="hidden">
+          </label>
+        </div>
+      </div>
+
+      <!-- Business Branding Card -->
+      <div class="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border border-amber-500/40 rounded-3xl p-4 shadow-xl flex items-center gap-3.5">
+        <div class="w-14 h-14 rounded-full border-2 border-amber-400/80 p-0.5 bg-black shadow-lg shadow-amber-500/20 shrink-0 overflow-hidden">
+          <img src="logo.png" alt="DC El Destape Licores" class="w-full h-full object-cover rounded-full">
+        </div>
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center gap-1.5">
+            <h3 class="font-black text-sm text-white uppercase tracking-wider">DC EL DESTAPE</h3>
+            <span class="text-[9px] font-bold text-amber-300 bg-amber-950/80 px-1.5 py-0.2 rounded border border-amber-500/40">VIP</span>
+          </div>
+          <p class="text-xs text-slate-400">Licores & Bebidas Exclusivas</p>
+          <div class="text-[10px] text-amber-400/90 font-mono font-bold mt-0.5">WhatsApp: +506 8992-7936</div>
+        </div>
+      </div>
+
+      <!-- Google Sheets Connection Settings -->
+      <div class="bg-slate-800/90 border border-slate-700/80 rounded-2xl p-4 space-y-3">
+        <div class="flex items-center gap-2.5 text-indigo-400">
+          <i data-lucide="database" class="w-5 h-5"></i>
+          <h2 class="text-sm font-bold text-white">Conexión con Google Sheets</h2>
+        </div>
+        <p class="text-xs text-slate-400 leading-relaxed">
+          Pega la URL de tu Web App de Google Apps Script para sincronizar en tiempo real.
+        </p>
+
+        <div>
+          <input type="url" id="sheetsApiUrl" placeholder="https://script.google.com/macros/s/.../exec" class="w-full px-3 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white font-mono placeholder-slate-500 focus:outline-none focus:border-indigo-500">
+        </div>
+
+        <div class="flex gap-2 pt-1">
+          <button onclick="guardarConfiguracionSheets()" class="flex-1 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl active:scale-95 transition-all">
+            Guardar y Conectar
+          </button>
+          <button onclick="probarConexionSheets()" class="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs font-semibold rounded-xl active:scale-95 transition-all flex items-center gap-1">
+            <i data-lucide="activity" class="w-4 h-4"></i>
+            Probar
+          </button>
+        </div>
+      </div>
+
+      <!-- Preferences & Exchange Rate -->
+      <div class="bg-slate-800/90 border border-slate-700/80 rounded-2xl p-4 space-y-3 text-xs">
+        <h3 class="font-bold uppercase tracking-wider text-slate-300">Ajustes Generales y Tipo de Cambio</h3>
+        
+        <div class="space-y-3">
+          <div>
+            <label class="block font-semibold text-slate-300 mb-1">Nombre del Negocio:</label>
+            <input type="text" id="businessNameInput" value="Libro de Inventario" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white">
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block font-semibold text-slate-300 mb-1">Tipo de Cambio (₡ / USD):</label>
+              <input type="number" id="exchangeRateInput" value="520" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white font-mono font-bold">
+            </div>
+            <div>
+              <label class="block font-semibold text-slate-300 mb-1">Teléfono / WhatsApp:</label>
+              <input type="tel" id="businessPhoneInput" placeholder="+506..." class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white">
+            </div>
+          </div>
+
+          <button onclick="guardarPreferenciasNegocio()" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded-xl active:scale-95 transition-all">
+            Guardar Ajustes
+          </button>
+        </div>
+      </div>
+
+      <!-- Reset & Reload Demo -->
+      <div class="bg-slate-800/40 border border-slate-800 rounded-2xl p-4 space-y-2 text-xs">
+        <h4 class="font-bold text-slate-400">Datos y Restauración</h4>
+        <div class="flex gap-2">
+          <button onclick="recargarCatalogoSemilla()" class="flex-1 py-2 bg-slate-800 text-slate-300 hover:text-white rounded-xl border border-slate-700 font-semibold">
+            Restaurar Catálogo Licores (54)
+          </button>
+          <button onclick="limpiarCacheLocal()" class="py-2 px-3 bg-rose-950/40 border border-rose-800/50 text-rose-300 rounded-xl font-semibold">
+            Limpiar Todo
+          </button>
+        </div>
+      </div>
+
+      <!-- Extra spacer for mobile bottom navigation -->
+      <div style="height: 120px; width: 100%;" class="w-full block"></div>
+    </section>
+
+  </main>
+
+  <!-- ============================================================== -->
+  <!-- MODAL: CREAR / EDITAR PRODUCTO (DUAL CURRENCY)                 -->
+  <!-- ============================================================== -->
+  <div id="modalProducto" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden items-end sm:items-center justify-center p-0 sm:p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-t-3xl sm:rounded-3xl max-w-md w-full p-5 space-y-4 max-h-[90vh] overflow-y-auto animate-slide-up">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h3 id="modalProductoTitulo" class="text-base font-bold text-white flex items-center gap-2">
+          <i data-lucide="wine" class="w-5 h-5 text-amber-400"></i>
+          Nuevo Producto
+        </h3>
+        <button onclick="cerrarModalProducto()" class="p-1 text-slate-400 hover:text-white">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <form id="formProducto" onsubmit="guardarProductoForm(event)" class="space-y-3 text-xs">
+        <!-- Code / Barcode -->
+        <div>
+          <label class="block font-semibold text-slate-300 mb-1">Código / SKU (Llave única) *</label>
+          <div class="flex gap-2">
+            <input type="text" id="prodCodigo" required placeholder="Ej. WHI-001" class="flex-1 px-3 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-white font-mono">
+            <button type="button" onclick="abrirEscaner('nuevo_producto')" class="px-3 bg-indigo-600 text-white rounded-xl active:scale-95">
+              <i data-lucide="scan-barcode" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Name -->
+        <div>
+          <label class="block font-semibold text-slate-300 mb-1">Nombre del Producto *</label>
+          <input type="text" id="prodNombre" required placeholder="Ej. Johnnie Walker Black Label litro" class="w-full px-3 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-white">
+        </div>
+
+        <!-- Category -->
+        <div>
+          <label class="block font-semibold text-slate-300 mb-1">Categoría</label>
+          <input type="text" id="prodCategoria" list="categoriasList" placeholder="Ej. WHISKY/WHISKEY, RON, TEQUILA..." class="w-full px-3 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-white">
+          <datalist id="categoriasList">
+            <option value="WHISKY/WHISKEY">
+            <option value="BOURBON">
+            <option value="RON">
+            <option value="VODKA">
+            <option value="TEQUILA">
+            <option value="LICORES VARIOS">
+            <option value="CREMAS">
+            <option value="VINO">
+          </datalist>
+        </div>
+
+        <!-- Sales Prices USD and CRC -->
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-slate-300 mb-1">Precio Venta USD ($)</label>
+            <input type="number" step="0.01" id="prodPrecioVentaUSD" value="0" oninput="autoConvertirPrecio('USD')" class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-mono font-bold">
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-300 mb-1">Precio Venta CRC (₡)</label>
+            <input type="number" step="1" id="prodPrecioVentaCRC" value="0" oninput="autoConvertirPrecio('CRC')" class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-mono font-bold">
+          </div>
+        </div>
+
+        <!-- Reference Costs USD and CRC -->
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-slate-300 mb-1">Costo Ref. USD ($)</label>
+            <input type="number" step="0.01" id="prodCostoRefUSD" value="0" oninput="autoConvertirCosto('USD')" class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-mono">
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-300 mb-1">Costo Ref. CRC (₡)</label>
+            <input type="number" step="1" id="prodCostoRefCRC" value="0" oninput="autoConvertirCosto('CRC')" class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-mono">
+          </div>
+        </div>
+
+        <!-- Stock and Stock Minimo -->
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-slate-300 mb-1">Stock Inicial / Actual *</label>
+            <input type="number" id="prodStock" required min="0" value="0" class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-mono font-bold">
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-300 mb-1">Stock Mínimo (Alerta)</label>
+            <input type="number" id="prodStockMinimo" min="0" value="2" class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-mono">
+          </div>
+        </div>
+
+        <!-- Submit & Delete actions -->
+        <div class="pt-2 space-y-2">
+          <button type="submit" class="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl shadow-lg shadow-indigo-600/30 active:scale-95 transition-all flex items-center justify-center gap-2">
+            <i data-lucide="check" class="w-4 h-4"></i>
+            Guardar Producto
+          </button>
+          <button type="button" id="btnEliminarProducto" onclick="eliminarProductoActual()" class="hidden w-full py-2 bg-rose-950/40 border border-rose-800/50 text-rose-400 font-semibold rounded-xl active:scale-95">
+            Eliminar Producto
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============================================================== -->
+  <!-- MODAL: ESCÁNER DE CÓDIGO DE BARRAS / QR                        -->
+  <!-- ============================================================== -->
+  <div id="modalEscaner" class="fixed inset-0 z-50 bg-black/90 backdrop-blur-md hidden items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl max-w-sm w-full p-4 space-y-4 shadow-2xl relative">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+        <h3 class="text-sm font-bold text-white flex items-center gap-2">
+          <i data-lucide="camera" class="w-4 h-4 text-indigo-400"></i>
+          Escaneando Código
+        </h3>
+        <button onclick="cerrarEscaner()" class="p-1 text-slate-400 hover:text-white">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="relative overflow-hidden rounded-2xl bg-black aspect-square flex items-center justify-center">
+        <div id="reader" class="w-full h-full"></div>
+      </div>
+
+      <p class="text-center text-xs text-slate-400">Apunta la cámara al código de barras del producto</p>
+
+      <button onclick="cerrarEscaner()" class="w-full py-2.5 bg-slate-800 text-slate-300 font-semibold text-xs rounded-xl active:scale-95">
+        Cancelar
+      </button>
+    </div>
+  </div>
+
+  <!-- ============================================================== -->
+  <!-- MODAL: RECIBO / COMPROBANTE WHATSAPP                           -->
+  <!-- ============================================================== -->
+  <div id="modalRecibo" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden items-center justify-center p-4">
+    <div class="bg-white text-slate-900 rounded-3xl max-w-sm w-full p-5 space-y-4 shadow-2xl animate-pop-in">
+      <div class="text-center space-y-1 border-b border-dashed border-slate-300 pb-3">
+        <div class="w-14 h-14 rounded-full border-2 border-amber-500/60 p-0.5 bg-black mx-auto shadow-md mb-1.5 overflow-hidden">
+          <img src="logo.png" alt="DC El Destape" class="w-full h-full object-cover rounded-full">
+        </div>
+        <h3 class="font-black text-base text-slate-900 uppercase tracking-wide" id="reciboNegocio">DC El Destape Licores</h3>
+        <p class="text-[11px] font-bold text-amber-700 font-mono">Tel: +506 8992-7936</p>
+        <p class="text-xs text-slate-500 font-mono font-bold pt-1" id="reciboId">VTA-001</p>
+        <p class="text-xs text-slate-500" id="reciboFecha">28/08/2026 08:00</p>
+      </div>
+
+      <!-- Items in receipt -->
+      <div id="reciboItems" class="space-y-1.5 text-xs divide-y divide-slate-100 max-h-48 overflow-y-auto"></div>
+
+      <!-- Receipt total -->
+      <div class="border-t border-dashed border-slate-300 pt-3 space-y-1 text-xs">
+        <div class="flex justify-between font-medium text-slate-600">
+          <span>Método de Pago:</span>
+          <span id="reciboMetodo" class="font-bold text-slate-900">Efectivo</span>
+        </div>
+        <div class="flex justify-between text-base font-black text-slate-900 pt-1 font-mono">
+          <span>TOTAL:</span>
+          <div class="text-right">
+            <span id="reciboTotalCRC">₡0</span>
+            <span class="text-xs text-slate-500 block font-normal" id="reciboTotalUSD">($0.00 USD)</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="space-y-2 pt-2 text-xs">
+        <button onclick="compartirReciboWhatsApp()" class="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/30 active:scale-95 transition-all">
+          <i data-lucide="message-circle" class="w-4 h-4"></i>
+          Enviar Ticket por WhatsApp
+        </button>
+        <button onclick="cerrarModalRecibo()" class="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-2xl active:scale-95 transition-all">
+          Listo / Nueva Venta
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================== -->
+  <!-- MODAL: SELECCIÓN DE VENDEDOR (LOGIN / SWITCH)                  -->
+  <!-- ============================================================== -->
+  <div id="modalLoginVendedor" class="fixed inset-0 z-50 bg-black/90 backdrop-blur-md hidden items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl max-w-sm w-full p-6 space-y-5 text-center shadow-2xl animate-pop-in">
+      <div class="w-20 h-20 mx-auto rounded-full border-2 border-amber-400/80 p-0.5 bg-black shadow-2xl shadow-amber-500/30 overflow-hidden">
+        <img src="logo.png" alt="DC El Destape" class="w-full h-full object-cover rounded-full">
+      </div>
+      <div>
+        <h3 class="text-base font-black text-white tracking-wide uppercase">DC EL DESTAPE LICORES</h3>
+        <p class="text-xs text-amber-300/90 font-semibold mt-0.5">¿Quién está ingresando al sistema?</p>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3 pt-1">
+        <!-- Perfil Carlos -->
+        <button onclick="seleccionarVendedorLogin('Carlos')" class="p-4 bg-slate-800/90 hover:bg-slate-800 border-2 border-indigo-500/40 hover:border-indigo-500 rounded-2xl flex flex-col items-center gap-2 group active:scale-95 transition-all shadow-lg">
+          <div class="w-12 h-12 rounded-full bg-blue-600/20 border border-blue-500/50 flex items-center justify-center text-blue-400 font-black text-xl group-hover:scale-105 transition-all">
+            C
+          </div>
+          <div>
+            <div class="font-extrabold text-white text-sm">Carlos</div>
+            <div class="text-[10px] text-indigo-300 font-medium">Vendedor</div>
+          </div>
+        </button>
+
+        <!-- Perfil Daniel -->
+        <button onclick="seleccionarVendedorLogin('Daniel')" class="p-4 bg-slate-800/90 hover:bg-slate-800 border-2 border-violet-500/40 hover:border-violet-500 rounded-2xl flex flex-col items-center gap-2 group active:scale-95 transition-all shadow-lg">
+          <div class="w-12 h-12 rounded-full bg-violet-600/20 border border-violet-500/50 flex items-center justify-center text-violet-400 font-black text-xl group-hover:scale-105 transition-all">
+            D
+          </div>
+          <div>
+            <div class="font-extrabold text-white text-sm">Daniel</div>
+            <div class="text-[10px] text-violet-300 font-medium">Vendedor</div>
+          </div>
+        </button>
+      </div>
+
+      <!-- Opción Consolidado -->
+      <button onclick="seleccionarVendedorLogin('Consolidado')" class="w-full py-2.5 px-3 bg-slate-800/60 hover:bg-slate-800 border border-slate-700/80 rounded-xl text-xs font-bold text-slate-300 flex items-center justify-center gap-2 active:scale-95 transition-all">
+        <i data-lucide="layers" class="w-4 h-4 text-amber-400"></i>
+        <span>Ver Todo Consolidado (Total)</span>
+      </button>
+
+      <button onclick="cerrarModalLoginVendedor()" id="btnCerrarLoginVendedor" class="hidden text-xs text-slate-500 hover:text-slate-400 pt-1">
+        Cerrar ventana
+      </button>
+    </div>
+  </div>
+
+  <!-- ============================================================== -->
+  <!-- MODAL: REGISTRAR MOVIMIENTO DE DINERO                          -->
+  <!-- ============================================================== -->
+  <div id="modalMovimientoDinero" class="fixed inset-0 z-50 bg-black/85 backdrop-blur-md hidden items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl max-w-sm w-full p-5 space-y-4 shadow-2xl animate-pop-in">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h3 id="modalFinanzasTitulo" class="text-sm font-bold text-white flex items-center gap-2">
+          <i data-lucide="coins" class="w-4 h-4 text-emerald-400"></i>
+          <span>Movimiento de Dinero</span>
+        </h3>
+        <button onclick="cerrarModalMovimientoDinero()" class="p-1 text-slate-400 hover:text-white">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <form id="formMovimientoDinero" onsubmit="guardarMovimientoDinero(event)" class="space-y-3 text-xs">
+        <!-- Tipo de Transacción -->
+        <div>
+          <label class="block font-semibold text-slate-300 mb-1">Tipo de Transacción *</label>
+          <select id="finTipoMovimiento" onchange="actualizarCamposModalFinanzas()" class="w-full px-3 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-white font-bold text-xs focus:border-indigo-500">
+            <option value="aporte_capital">💵 Aporte / Inyección de Capital a Empresa</option>
+            <option value="pago_socio">💸 Pago / Reembolso de Deuda a Socio</option>
+            <option value="gasto_operativo">🧾 Gasto Operativo de Empresa</option>
+          </select>
+        </div>
+
+        <!-- Socio Involucrado -->
+        <div id="finGrupoSocio">
+          <label class="block font-semibold text-slate-300 mb-1">Socio Inversionista *</label>
+          <select id="finSocioSelect" class="w-full px-3 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-white font-bold text-xs focus:border-indigo-500">
+            <option value="Carlos">👤 Carlos</option>
+            <option value="Daniel">👤 Daniel</option>
+          </select>
+        </div>
+
+        <!-- Fecha -->
+        <div>
+          <label class="block font-semibold text-slate-300 mb-1">Fecha</label>
+          <input type="date" id="finFecha" class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-mono">
+        </div>
+
+        <!-- Montos USD y CRC -->
+        <div class="grid grid-cols-2 gap-2.5">
+          <div>
+            <label class="block font-semibold text-slate-300 mb-1">Monto en Colones (₡) *</label>
+            <input type="number" id="finMontoCRC" min="1" step="1" placeholder="₡0" oninput="autoConvertirFinanzas('CRC')" required class="w-full px-3 py-2.5 bg-slate-800 border border-emerald-500/40 rounded-xl text-white font-mono font-black text-sm focus:border-emerald-400">
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-300 mb-1">Equivalente USD ($)</label>
+            <input type="number" id="finMontoUSD" min="0.01" step="0.01" placeholder="$0.00" oninput="autoConvertirFinanzas('USD')" class="w-full px-3 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-white font-mono font-bold text-sm focus:border-indigo-400">
+          </div>
+        </div>
+
+        <!-- Método de Pago -->
+        <div class="grid grid-cols-2 gap-2.5">
+          <div>
+            <label class="block font-semibold text-slate-300 mb-1">Método de Pago</label>
+            <select id="finMetodoPago" class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white">
+              <option value="SINPE Móvil">📱 SINPE Móvil</option>
+              <option value="Efectivo">💵 Efectivo</option>
+              <option value="Transferencia">🏦 Transferencia</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-300 mb-1">Tipo Cambio (₡)</label>
+            <input type="number" id="finTipoCambio" class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-mono" oninput="autoConvertirFinanzas('CRC')">
+          </div>
+        </div>
+
+        <!-- Notas / Referencia -->
+        <div>
+          <label class="block font-semibold text-slate-300 mb-1">Detalle / Referencia / Factura</label>
+          <input type="text" id="finNotas" placeholder="Ej. Aporte para insumos / Ref #98127" class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white">
+        </div>
+
+        <button type="submit" class="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-2xl shadow-lg shadow-emerald-600/30 active:scale-95 transition-all flex items-center justify-center gap-2 mt-2 text-xs">
+          <i data-lucide="check" class="w-4 h-4"></i>
+          <span>Registrar Transacción</span>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============================================================== -->
+  <!-- BOTTOM NAVIGATION BAR                                          -->
+  <!-- ============================================================== -->
+  <nav class="fixed bottom-0 left-0 right-0 z-40 bg-slate-900/95 backdrop-blur-lg border-t border-slate-800/80 px-2 py-1.5">
+    <div class="max-w-md mx-auto grid grid-cols-5 gap-1 text-[10px] font-bold text-slate-400">
+      
+      <!-- Tab 1: Dashboard -->
+      <button onclick="cambiarVista('dashboard')" id="navTab-dashboard" class="nav-item active flex flex-col items-center justify-center py-1.5 rounded-xl transition-all">
+        <i data-lucide="layout-dashboard" class="w-5 h-5 mb-1"></i>
+        <span>Resumen</span>
+      </button>
+
+      <!-- Tab 2: Productos -->
+      <button onclick="cambiarVista('inventario')" id="navTab-inventario" class="nav-item flex flex-col items-center justify-center py-1.5 rounded-xl transition-all">
+        <i data-lucide="wine" class="w-5 h-5 mb-1"></i>
+        <span>Licores</span>
+      </button>
+
+      <!-- Tab 3: Ventas (Main center button) -->
+      <button onclick="cambiarVista('ventas')" id="navTab-ventas" class="nav-item flex flex-col items-center justify-center py-1.5 rounded-xl transition-all text-indigo-400">
+        <div class="w-7 h-7 rounded-full bg-indigo-600 text-white flex items-center justify-center -mt-2 shadow-md shadow-indigo-500/30">
+          <i data-lucide="shopping-cart" class="w-4 h-4"></i>
+        </div>
+        <span class="mt-0.5">Vender</span>
+      </button>
+
+      <!-- Tab 4: Compras -->
+      <button onclick="cambiarVista('compras')" id="navTab-compras" class="nav-item flex flex-col items-center justify-center py-1.5 rounded-xl transition-all">
+        <i data-lucide="truck" class="w-5 h-5 mb-1"></i>
+        <span>Compras</span>
+      </button>
+
+      <!-- Tab 5: Finanzas y Cuentas -->
+      <button onclick="cambiarVista('finanzas')" id="navTab-finanzas" class="nav-item flex flex-col items-center justify-center py-1.5 rounded-xl transition-all">
+        <i data-lucide="wallet" class="w-5 h-5 mb-1"></i>
+        <span>Finanzas</span>
+      </button>
+
+    </div>
+  </nav>
+
+  <!-- Application Logic -->
+  <script src="app.js?v=20260828_5"></script>
+</body>
+</html>
