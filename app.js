@@ -980,10 +980,10 @@ function renderizarInventario() {
 
         <!-- Body: Photo + Name & Breakdown -->
         <div class="flex gap-3 items-center">
-          <div class="relative w-20 h-20 rounded-2xl bg-slate-800 border border-slate-700/80 flex items-center justify-center shrink-0 overflow-hidden shadow-md cursor-pointer group" onclick="abrirFotoCompleta('${imgFormatted || ''}', '${p.nombre.replace(/'/g, "\\'")}')" title="Toca para ver foto completa">
+          <div class="relative w-20 h-20 rounded-2xl bg-slate-800 border border-slate-700/80 flex items-center justify-center shrink-0 overflow-hidden shadow-md cursor-pointer group foto-producto-btn" data-url="${imgFormatted || ''}" data-nombre="${p.nombre.replace(/"/g, '&quot;')}" title="Toca para ver foto completa">
             ${hasImg ? `
               <img src="${imgFormatted}" alt="${p.nombre}" loading="lazy" class="w-full h-full object-cover group-hover:scale-105 transition-transform" 
-                onerror="this.onerror=null; if(this.src.includes('lh3.googleusercontent.com/d/')){ const id = this.src.split('/d/')[1]; this.src='https://drive.google.com/thumbnail?id='+id+'&sz=w500'; } else { this.classList.add('hidden'); this.nextElementSibling.classList.remove('hidden'); }">
+                onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.classList.remove('hidden'); this.nextElementSibling.classList.add('flex');">
               <div class="hidden flex-col items-center justify-center text-slate-500 text-[10px] w-full h-full">
                 <i data-lucide="wine" class="w-7 h-7 text-slate-600"></i>
               </div>
@@ -1506,14 +1506,23 @@ function abrirFotoCompleta(url, nombre) {
     return;
   }
 
+  // Intentar cargar la URL principal; si falla intentar thumbnail más grande
   img.onerror = function() {
-    if (this.src && this.src.includes("lh3.googleusercontent.com/d/")) {
-      const id = this.src.split("/d/")[1];
-      this.src = `https://drive.google.com/thumbnail?id=${id}&sz=w1000`;
+    this.onerror = null;
+    // Extraer driveId si está en el src
+    const idMatch = this.src.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+    if (idMatch) {
+      this.src = `https://drive.google.com/thumbnail?id=${idMatch[1]}&sz=w1200`;
+    } else {
+      // Sin fallback posible — ocultar imagen rota
+      this.style.display = 'none';
     }
   };
 
-  img.src = url;
+  // Asegurarse de que el src siempre se actualice correctamente
+  img.src = "";
+  img.style.display = "";
+  img.src = formatearUrlImagen(url);
   img.alt = nombre || "Licor";
 
   if (nombreEl) {
@@ -1542,10 +1551,25 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") cerrarFotoCompleta();
 });
 
+// Delegación de eventos para fotos de productos en inventario (compatible móvil)
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest(".foto-producto-btn");
+  if (btn) {
+    e.preventDefault();
+    e.stopPropagation();
+    const url = btn.dataset.url || "";
+    const nombre = btn.dataset.nombre || "";
+    abrirFotoCompleta(url, nombre);
+  }
+}, { passive: false });
+
+
+
 function formatearUrlImagen(urlOrId) {
   if (!urlOrId || typeof urlOrId !== 'string') return '';
   const trimmed = urlOrId.trim();
   if (!trimmed) return '';
+
 
   // 1. Data URLs directas (Base64)
   if (trimmed.startsWith('data:image/')) {
@@ -1583,8 +1607,9 @@ function formatearUrlImagen(urlOrId) {
   }
 
   if (driveId) {
-    // lh3.googleusercontent.com/d/ID es la forma oficial y sin bloqueo CORS para Google Drive público
-    return `https://lh3.googleusercontent.com/d/${driveId}`;
+    // drive.google.com/thumbnail?id=ID&sz=w400 funciona en móvil y escritorio sin restricciones CORS
+    // lh3.googleusercontent.com/d/ID puede fallar en Android/iOS sin autenticación
+    return `https://drive.google.com/thumbnail?id=${driveId}&sz=w400`;
   }
 
   // 3. URLs web directas (http/https)
