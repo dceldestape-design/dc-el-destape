@@ -1,4 +1,4 @@
-const CACHE_NAME = 'inventory-sheets-v8';
+const CACHE_NAME = 'inventory-sheets-v9';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -7,6 +7,7 @@ const ASSETS_TO_CACHE = [
   './manifest.json',
   './logo.png',
   'https://cdn.tailwindcss.com',
+  'https://cdn.jsdelivr.net/npm/lucide@0.344.0/dist/umd/lucide.min.js',
   'https://unpkg.com/lucide@latest',
   'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',

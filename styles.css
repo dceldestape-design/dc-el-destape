@@ -35,9 +35,17 @@ nav.fixed {
   color: #818cf8 !important;
 }
 
-.nav-item.active i {
+.nav-item.active i,
+.nav-item.active svg {
   transform: scale(1.1);
   transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Lucide icon baseline styling */
+svg.lucide, i[data-lucide] {
+  display: inline-block;
+  vertical-align: middle;
+  stroke-width: 2;
 }
 
 /* Category pill active */
