@@ -2919,11 +2919,12 @@ function calcularSaldosFinancieros() {
 
   // Saldo = Ventas + Capital Propio Empresa + Aportes Socios - Compras Empresa - Reembolsos - Gastos
   const saldoEmpresaCRC = totalVentasCRC + empresaCapitalPropioCRC + totalAportesSociosCRC - empresaPagaComprasCRC - totalReembolsosSociosCRC - empresaGastosCRC;
-  const saldoEmpresaUSD = totalVentasUSD + empresaCapitalPropioUSD + totalAportesSociosUSD - empresaPagaComprasUSD - totalReembolsosSociosUSD - empresaGastosUSD;
+  const saldoEmpresaUSD = tcActual > 0 ? (saldoEmpresaCRC / tcActual) : 0;
 
   return {
     tcActual,
-    totalVentasCRC, totalVentasUSD,
+    totalVentasCRC,
+    totalVentasUSD: tcActual > 0 ? (totalVentasCRC / tcActual) : 0,
     empresa: {
       saldoCRC: saldoEmpresaCRC,
       saldoUSD: saldoEmpresaUSD,
@@ -2932,16 +2933,16 @@ function calcularSaldosFinancieros() {
     },
     carlos: {
       deudaCRC: carlosDeudaCRC,
-      deudaUSD: carlosDeudaUSD,
+      deudaUSD: tcActual > 0 ? (carlosDeudaCRC / tcActual) : 0,
       totalAportadoCRC: carlosTotalAportadoCRC,
-      totalAportadoUSD: carlosTotalAportadoUSD,
+      totalAportadoUSD: tcActual > 0 ? (carlosTotalAportadoCRC / tcActual) : 0,
       reembolsadoCRC: carlosReembolsosCRC
     },
     daniel: {
       deudaCRC: danielDeudaCRC,
-      deudaUSD: danielDeudaUSD,
+      deudaUSD: tcActual > 0 ? (danielDeudaCRC / tcActual) : 0,
       totalAportadoCRC: danielTotalAportadoCRC,
-      totalAportadoUSD: danielTotalAportadoUSD,
+      totalAportadoUSD: tcActual > 0 ? (danielTotalAportadoCRC / tcActual) : 0,
       reembolsadoCRC: danielReembolsosCRC
     }
   };
