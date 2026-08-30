@@ -20,88 +20,9 @@ const fmtNum = (n) => new Intl.NumberFormat("es-CR").format(Number.isFinite(n) ?
 const todayStr = () => new Date().toISOString().slice(0, 10);
 const uid = () => Math.random().toString(36).slice(2, 10);
 
-// --- Catálogo Semilla de Licores y Bebidas ---
-const SEED_PRODUCTS = [
-  {"codigo": "WHI-001", "nombre": "Johnnie Walker Red label litro", "categoria": "WHISKY/WHISKEY", "costoRefUSD": 12.0, "costoRefCRC": 5640.0, "precioVentaUSD": 21.28, "precioVentaCRC": 10000.0, "stockInicial": 0},
-  {"codigo": "WHI-002", "nombre": "Johnnie Walker Black label litro", "categoria": "WHISKY/WHISKEY", "costoRefUSD": 22.0, "costoRefCRC": 10340.0, "precioVentaUSD": 40.43, "precioVentaCRC": 19000.0, "stockInicial": 1},
-  {"codigo": "WHI-003", "nombre": "Johnnie Walker Double black label litro", "categoria": "WHISKY/WHISKEY", "costoRefUSD": 30.0, "costoRefCRC": 14100.0, "precioVentaUSD": 48.94, "precioVentaCRC": 23000.0, "stockInicial": 1},
-  {"codigo": "WHI-004", "nombre": "Johnnie Walker Gold Label botella", "categoria": "WHISKY/WHISKEY", "costoRefUSD": 50.0, "costoRefCRC": 23500.0, "precioVentaUSD": 85.11, "precioVentaCRC": 40000.0, "stockInicial": 0},
-  {"codigo": "WHI-005", "nombre": "Johnnie Walker Green Label botella", "categoria": "WHISKY/WHISKEY", "costoRefUSD": 50.0, "costoRefCRC": 23500.0, "precioVentaUSD": 85.11, "precioVentaCRC": 40000.0, "stockInicial": 0},
-  {"codigo": "WHI-006", "nombre": "Johnnie Walker Blue Label botella", "categoria": "WHISKY/WHISKEY", "costoRefUSD": 175.0, "costoRefCRC": 82250.0, "precioVentaUSD": 255.32, "precioVentaCRC": 120000.0, "stockInicial": 0},
-  {"codigo": "WHI-007", "nombre": "Old Parr 12 años litro", "categoria": "WHISKY/WHISKEY", "costoRefUSD": 22.0, "costoRefCRC": 10340.0, "precioVentaUSD": 36.17, "precioVentaCRC": 17000.0, "stockInicial": 0},
-  {"codigo": "WHI-008", "nombre": "Chivas 12 años litro", "categoria": "WHISKY/WHISKEY", "costoRefUSD": 22.0, "costoRefCRC": 10340.0, "precioVentaUSD": 36.17, "precioVentaCRC": 17000.0, "stockInicial": 0},
-  {"codigo": "WHI-009", "nombre": "Buchanans 12 años litro", "categoria": "WHISKY/WHISKEY", "costoRefUSD": 28.0, "costoRefCRC": 13160.0, "precioVentaUSD": 46.81, "precioVentaCRC": 22000.0, "stockInicial": 0},
-  {"codigo": "WHI-010", "nombre": "Buchanan's 18 años botella", "categoria": "WHISKY/WHISKEY", "costoRefUSD": 58.0, "costoRefCRC": 27260.0, "precioVentaUSD": 89.36, "precioVentaCRC": 42000.0, "stockInicial": 0},
-  {"codigo": "WHI-011", "nombre": "Jack Daniel's clásico litro", "categoria": "WHISKY/WHISKEY", "costoRefUSD": 0, "costoRefCRC": 0, "precioVentaUSD": 34.04, "precioVentaCRC": 16000.0, "stockInicial": 0},
-  {"codigo": "WHI-012", "nombre": "Jack Daniels Apple litro", "categoria": "WHISKY/WHISKEY", "costoRefUSD": 0, "costoRefCRC": 0, "precioVentaUSD": 36.17, "precioVentaCRC": 17000.0, "stockInicial": 0},
-  {"codigo": "WHI-013", "nombre": "Jack Daniel's Honey Litro", "categoria": "WHISKY/WHISKEY", "costoRefUSD": 16.0, "costoRefCRC": 7520.0, "precioVentaUSD": 36.17, "precioVentaCRC": 17000.0, "stockInicial": 1},
-  {"codigo": "WHI-014", "nombre": "Fireball litro", "categoria": "WHISKY/WHISKEY", "costoRefUSD": 10.0, "costoRefCRC": 4700.0, "precioVentaUSD": 21.28, "precioVentaCRC": 10000.0, "stockInicial": 0},
-  {"codigo": "WHI-015", "nombre": "Ballantines litro", "categoria": "WHISKY/WHISKEY", "costoRefUSD": 0, "costoRefCRC": 0, "precioVentaUSD": 21.28, "precioVentaCRC": 10000.0, "stockInicial": 0},
-  {"codigo": "BOU-001", "nombre": "Jim Beam white litro", "categoria": "BOURBON", "costoRefUSD": 10.0, "costoRefCRC": 4700.0, "precioVentaUSD": 21.28, "precioVentaCRC": 10000.0, "stockInicial": 0},
-  {"codigo": "BOU-002", "nombre": "Jim Beam Miel", "categoria": "BOURBON", "costoRefUSD": 10.0, "costoRefCRC": 4700.0, "precioVentaUSD": 21.28, "precioVentaCRC": 10000.0, "stockInicial": 0},
-  {"codigo": "RON-001", "nombre": "Flor de caña 4 años litro", "categoria": "RON", "costoRefUSD": 0, "costoRefCRC": 0, "precioVentaUSD": 14.89, "precioVentaCRC": 7000.0, "stockInicial": 0},
-  {"codigo": "RON-002", "nombre": "Flor de caña 7 años litro", "categoria": "RON", "costoRefUSD": 0, "costoRefCRC": 0, "precioVentaUSD": 19.15, "precioVentaCRC": 9000.0, "stockInicial": 0},
-  {"codigo": "RON-003", "nombre": "Flor de caña 12 años litro", "categoria": "RON", "costoRefUSD": 0, "costoRefCRC": 0, "precioVentaUSD": 38.3, "precioVentaCRC": 18000.0, "stockInicial": 0},
-  {"codigo": "RON-004", "nombre": "Flor de caña 18 años botella", "categoria": "RON", "costoRefUSD": 0, "costoRefCRC": 0, "precioVentaUSD": 38.3, "precioVentaCRC": 18000.0, "stockInicial": 0},
-  {"codigo": "RON-005", "nombre": "Flor de caña 18 años litro", "categoria": "RON", "costoRefUSD": 24.0, "costoRefCRC": 11280.0, "precioVentaUSD": 44.68, "precioVentaCRC": 21000.0, "stockInicial": 0},
-  {"codigo": "RON-006", "nombre": "Flor de caña Espresso botella", "categoria": "RON", "costoRefUSD": 0, "costoRefCRC": 0, "precioVentaUSD": 19.15, "precioVentaCRC": 9000.0, "stockInicial": 0},
-  {"codigo": "RON-007", "nombre": "Flor de caña Cristalino botella", "categoria": "RON", "costoRefUSD": 0, "costoRefCRC": 0, "precioVentaUSD": 25.53, "precioVentaCRC": 12000.0, "stockInicial": 0},
-  {"codigo": "RON-008", "nombre": "Bacardi Carta Oro Litro", "categoria": "RON", "costoRefUSD": 0, "costoRefCRC": 0, "precioVentaUSD": 17.02, "precioVentaCRC": 8000.0, "stockInicial": 0},
-  {"codigo": "RON-009", "nombre": "Bacardi claro litro", "categoria": "RON", "costoRefUSD": 0, "costoRefCRC": 0, "precioVentaUSD": 17.02, "precioVentaCRC": 8000.0, "stockInicial": 0},
-  {"codigo": "RON-010", "nombre": "Centenario 7 años litro", "categoria": "RON", "costoRefUSD": 0, "costoRefCRC": 0, "precioVentaUSD": 21.28, "precioVentaCRC": 10000.0, "stockInicial": 0},
-  {"codigo": "RON-011", "nombre": "Centenario 12 años botella", "categoria": "RON", "costoRefUSD": 0, "costoRefCRC": 0, "precioVentaUSD": 27.66, "precioVentaCRC": 13000.0, "stockInicial": 0},
-  {"codigo": "RON-012", "nombre": "Zacapa Ámbar botella", "categoria": "RON", "costoRefUSD": 0, "costoRefCRC": 0, "precioVentaUSD": 42.55, "precioVentaCRC": 20000.0, "stockInicial": 0},
-  {"codigo": "RON-013", "nombre": "Zacapa edición negra botella", "categoria": "RON", "costoRefUSD": 0, "costoRefCRC": 0, "precioVentaUSD": 55.32, "precioVentaCRC": 26000.0, "stockInicial": 0},
-  {"codigo": "RON-014", "nombre": "Zacapa 23 litro", "categoria": "RON", "costoRefUSD": 0, "costoRefCRC": 0, "precioVentaUSD": 59.57, "precioVentaCRC": 28000.0, "stockInicial": 0},
-  {"codigo": "RON-015", "nombre": "Malibú litro", "categoria": "RON", "costoRefUSD": 9.0, "costoRefCRC": 4230.0, "precioVentaUSD": 21.28, "precioVentaCRC": 10000.0, "stockInicial": 0},
-  {"codigo": "RON-016", "nombre": "Captain Morgan Private Stock litro", "categoria": "RON", "costoRefUSD": 0, "costoRefCRC": 0, "precioVentaUSD": 29.79, "precioVentaCRC": 14000.0, "stockInicial": 0},
-  {"codigo": "RON-017", "nombre": "Abuelo", "categoria": "RON", "costoRefUSD": 8.0, "costoRefCRC": 3760.0, "precioVentaUSD": 17.02, "precioVentaCRC": 8000.0, "stockInicial": 2},
-  {"codigo": "VOD-001", "nombre": "Absolut vodka litro", "categoria": "VODKA", "costoRefUSD": 0, "costoRefCRC": 0, "precioVentaUSD": 21.28, "precioVentaCRC": 10000.0, "stockInicial": 0},
-  {"codigo": "VOD-002", "nombre": "Absolut Mandrin litro", "categoria": "VODKA", "costoRefUSD": 0, "costoRefCRC": 0, "precioVentaUSD": 21.28, "precioVentaCRC": 10000.0, "stockInicial": 0},
-  {"codigo": "VOD-003", "nombre": "Absolut Peach litro", "categoria": "VODKA", "costoRefUSD": 0, "costoRefCRC": 0, "precioVentaUSD": 21.28, "precioVentaCRC": 10000.0, "stockInicial": 0},
-  {"codigo": "VOD-004", "nombre": "Hpnotiq litro", "categoria": "VODKA", "costoRefUSD": 16.0, "costoRefCRC": 7520.0, "precioVentaUSD": 29.79, "precioVentaCRC": 14000.0, "stockInicial": 0},
-  {"codigo": "TEQ-001", "nombre": "Jarana claro litro", "categoria": "TEQUILA", "costoRefUSD": 0, "costoRefCRC": 0, "precioVentaUSD": 14.89, "precioVentaCRC": 7000.0, "stockInicial": 0},
-  {"codigo": "TEQ-002", "nombre": "1800 silver botella", "categoria": "TEQUILA", "costoRefUSD": 0, "costoRefCRC": 0, "precioVentaUSD": 38.3, "precioVentaCRC": 18000.0, "stockInicial": 0},
-  {"codigo": "TEQ-003", "nombre": "1800 reposado botella", "categoria": "TEQUILA", "costoRefUSD": 0, "costoRefCRC": 0, "precioVentaUSD": 42.55, "precioVentaCRC": 20000.0, "stockInicial": 0},
-  {"codigo": "TEQ-004", "nombre": "1800 añejo botella", "categoria": "TEQUILA", "costoRefUSD": 0, "costoRefCRC": 0, "precioVentaUSD": 51.06, "precioVentaCRC": 24000.0, "stockInicial": 0},
-  {"codigo": "TEQ-005", "nombre": "1800 Cristalino botella", "categoria": "TEQUILA", "costoRefUSD": 0, "costoRefCRC": 0, "precioVentaUSD": 59.57, "precioVentaCRC": 28000.0, "stockInicial": 0},
-  {"codigo": "TEQ-006", "nombre": "Jose Cuervo reposado litro", "categoria": "TEQUILA", "costoRefUSD": 0, "costoRefCRC": 0, "precioVentaUSD": 23.4, "precioVentaCRC": 11000.0, "stockInicial": 0},
-  {"codigo": "TEQ-007", "nombre": "Jose Cuervo Silver litro", "categoria": "TEQUILA", "costoRefUSD": 0, "costoRefCRC": 0, "precioVentaUSD": 23.4, "precioVentaCRC": 11000.0, "stockInicial": 0},
-  {"codigo": "TEQ-008", "nombre": "Don Julio Claro botella", "categoria": "TEQUILA", "costoRefUSD": 0, "costoRefCRC": 0, "precioVentaUSD": 63.83, "precioVentaCRC": 30000.0, "stockInicial": 0},
-  {"codigo": "TEQ-009", "nombre": "Don Julio Reposado botella", "categoria": "TEQUILA", "costoRefUSD": 0, "costoRefCRC": 0, "precioVentaUSD": 74.47, "precioVentaCRC": 35000.0, "stockInicial": 0},
-  {"codigo": "LIC-001", "nombre": "Anís del mono botella", "categoria": "LICORES VARIOS", "costoRefUSD": 0, "costoRefCRC": 0, "precioVentaUSD": 14.89, "precioVentaCRC": 7000.0, "stockInicial": 0},
-  {"codigo": "LIC-002", "nombre": "Kahlua litro", "categoria": "LICORES VARIOS", "costoRefUSD": 0, "costoRefCRC": 0, "precioVentaUSD": 21.28, "precioVentaCRC": 10000.0, "stockInicial": 0},
-  {"codigo": "LIC-003", "nombre": "Jager litro", "categoria": "LICORES VARIOS", "costoRefUSD": 11.0, "costoRefCRC": 5170.0, "precioVentaUSD": 21.28, "precioVentaCRC": 10000.0, "stockInicial": 0},
-  {"codigo": "LIC-004", "nombre": "Jager Naranja litro", "categoria": "LICORES VARIOS", "costoRefUSD": 15.0, "costoRefCRC": 7050.0, "precioVentaUSD": 27.66, "precioVentaCRC": 13000.0, "stockInicial": 0},
-  {"codigo": "LIC-005", "nombre": "Jager Manifest litro", "categoria": "LICORES VARIOS", "costoRefUSD": 0, "costoRefCRC": 0, "precioVentaUSD": 42.55, "precioVentaCRC": 20000.0, "stockInicial": 0},
-  {"codigo": "LIC-006", "nombre": "Aguardiente tapa roja litro", "categoria": "LICORES VARIOS", "costoRefUSD": 0, "costoRefCRC": 0, "precioVentaUSD": 12.77, "precioVentaCRC": 6000.0, "stockInicial": 0},
-  {"codigo": "LIC-007", "nombre": "Aguardiente tapa azul litro", "categoria": "LICORES VARIOS", "costoRefUSD": 0, "costoRefCRC": 0, "precioVentaUSD": 12.77, "precioVentaCRC": 6000.0, "stockInicial": 0},
-  {"codigo": "LIC-008", "nombre": "Frangelico litro", "categoria": "LICORES VARIOS", "costoRefUSD": 12.0, "costoRefCRC": 5640.0, "precioVentaUSD": 29.79, "precioVentaCRC": 14000.0, "stockInicial": 0},
-  {"codigo": "LIC-009", "nombre": "Campary", "categoria": "LICORES VARIOS", "costoRefUSD": 12.0, "costoRefCRC": 5640.0, "precioVentaUSD": 21.28, "precioVentaCRC": 10000.0, "stockInicial": 0},
-  {"codigo": "CRE-001", "nombre": "Tequila Rose litro", "categoria": "CREMAS", "costoRefUSD": 17.0, "costoRefCRC": 7990.0, "precioVentaUSD": 31.91, "precioVentaCRC": 15000.0, "stockInicial": 0},
-  {"codigo": "CRE-002", "nombre": "Baileys litro", "categoria": "CREMAS", "costoRefUSD": 0, "costoRefCRC": 0, "precioVentaUSD": 27.66, "precioVentaCRC": 13000.0, "stockInicial": 0},
-  {"codigo": "CRE-003", "nombre": "Baja Rosa litro", "categoria": "CREMAS", "costoRefUSD": 0, "costoRefCRC": 0, "precioVentaUSD": 21.28, "precioVentaCRC": 10000.0, "stockInicial": 0},
-  {"codigo": "CRE-004", "nombre": "Sheridans", "categoria": "CREMAS", "costoRefUSD": 22.0, "costoRefCRC": 10340.0, "precioVentaUSD": 40.43, "precioVentaCRC": 19000.0, "stockInicial": 0},
-  {"codigo": "CRE-005", "nombre": "Amarula litro", "categoria": "CREMAS", "costoRefUSD": 9.5, "costoRefCRC": 4465.0, "precioVentaUSD": 23.4, "precioVentaCRC": 11000.0, "stockInicial": 0},
-  {"codigo": "CRE-006", "nombre": "Cerveza", "categoria": "CREMAS", "costoRefUSD": 0, "costoRefCRC": 0, "precioVentaUSD": 3.19, "precioVentaCRC": 1500.0, "stockInicial": 0},
-  {"codigo": "CRE-007", "nombre": "Redbull", "categoria": "CREMAS", "costoRefUSD": 28.0, "costoRefCRC": 13160.0, "precioVentaUSD": 51.06, "precioVentaCRC": 24000.0, "stockInicial": 0},
-  {"codigo": "CRE-008", "nombre": "Smirnoff", "categoria": "CREMAS", "costoRefUSD": 23.0, "costoRefCRC": 10810.0, "precioVentaUSD": 42.55, "precioVentaCRC": 20000.0, "stockInicial": 0},
-  {"codigo": "CRE-009", "nombre": "Sol", "categoria": "CREMAS", "costoRefUSD": 20.0, "costoRefCRC": 9400.0, "precioVentaUSD": 36.17, "precioVentaCRC": 17000.0, "stockInicial": 0},
-  {"codigo": "CRE-010", "nombre": "Cuba", "categoria": "CREMAS", "costoRefUSD": 20.0, "costoRefCRC": 9400.0, "precioVentaUSD": 36.17, "precioVentaCRC": 17000.0, "stockInicial": 0},
-  {"codigo": "CRE-011", "nombre": "Corona", "categoria": "CREMAS", "costoRefUSD": 21.0, "costoRefCRC": 9870.0, "precioVentaUSD": 38.3, "precioVentaCRC": 18000.0, "stockInicial": 0},
-  {"codigo": "VIN-001", "nombre": "Vino", "categoria": "VINO", "costoRefUSD": 8.0, "costoRefCRC": 3760.0, "precioVentaUSD": 13.83, "precioVentaCRC": 6500.0, "stockInicial": 0}
-];
-
-const SEED_PURCHASES = [
-  { codigo: "CRE-005", cantidad: 2, costoUnitarioUSD: 9.5, tipoCambio: 470, costoUnitarioCRC: 9.5 * 470, fecha: "2026-08-10", id: "CMP-001", vendedor: "Carlos" },
-  { codigo: "VIN-001", cantidad: 3, costoUnitarioUSD: 8.0, tipoCambio: 470, costoUnitarioCRC: 8.0 * 470, fecha: "2026-08-10", id: "CMP-002", vendedor: "Daniel" },
-  { codigo: "LIC-004", cantidad: 2, costoUnitarioUSD: 15.0, tipoCambio: 470, costoUnitarioCRC: 15.0 * 470, fecha: "2026-08-10", id: "CMP-003", vendedor: "Carlos" },
-  { codigo: "RON-005", cantidad: 1, costoUnitarioUSD: 24.0, tipoCambio: 470, costoUnitarioCRC: 24.0 * 470, fecha: "2026-08-10", id: "CMP-004", vendedor: "Daniel" },
-  { codigo: "BOU-002", cantidad: 1, costoUnitarioUSD: 10.0, tipoCambio: 470, costoUnitarioCRC: 10.0 * 470, fecha: "2026-08-10", id: "CMP-005", vendedor: "Carlos" },
-  { codigo: "CRE-001", cantidad: 2, costoUnitarioUSD: 17.0, tipoCambio: 470, costoUnitarioCRC: 17.0 * 470, fecha: "2026-08-10", id: "CMP-006", vendedor: "Daniel" },
-  { codigo: "RON-015", cantidad: 1, costoUnitarioUSD: 11.0, tipoCambio: 470, costoUnitarioCRC: 11.0 * 470, fecha: "2026-08-10", id: "CMP-007", vendedor: "Carlos" },
-  { codigo: "WHI-001", cantidad: 1, costoUnitarioUSD: 12.0, tipoCambio: 470, costoUnitarioCRC: 12.0 * 470, fecha: "2026-08-10", id: "CMP-008", vendedor: "Carlos" }
-];
+// --- Catálogo y Compras Iniciales (Vacíos por defecto - Carga 100% desde Google Sheets) ---
+const SEED_PRODUCTS = [];
+const SEED_PURCHASES = [];
 
 // --- Estado Global ---
 let state = {
@@ -112,11 +33,14 @@ let state = {
   colaSincronizacion: [], // Cola persistente para operaciones sin internet
   carrito: [],
   listaCompraActual: [], // Carrito de compras multi-producto
-  // --- Maestro de Clientes y Pedidos ---
+  // --- Maestro de Clientes, Pedidos y Cuentas ---
   clientes: {}, // Mapa por ID { "CLI-xxx": { id, nombre, telefono, puntos, fechaRegistro, ultimaVenta } }
   clienteSeleccionado: null, // cliente activo en la venta actual
   descuentoPuntosAplicado: 0, // descuento en CRC aplicado de puntos en la venta actual
   pedidos: [], // Lista de pedidos / encargos de clientes
+  cuentas: [], // Lista de cuentas pendientes (Por Cobrar / Por Pagar)
+  filtroCuentas: "",
+  filtroTipoCuenta: "Por Cobrar", // "Por Cobrar" | "Por Pagar" | "todos"
   modoPOS: "venta", // "venta" | "pedido"
   config: {
     sheetsUrl: "",
@@ -299,19 +223,17 @@ function cargarEstadoLocal() {
 
   const prods = localStorage.getItem("inv_productos_v2");
   if (prods) {
-    state.productos = JSON.parse(prods);
+    try { state.productos = JSON.parse(prods); } catch(e) { state.productos = {}; }
   } else {
-    // Carga inicial semilla
-    const mapa = {};
-    SEED_PRODUCTS.forEach(p => { mapa[p.codigo] = p; });
-    state.productos = mapa;
-    state.compras = [...SEED_PURCHASES];
-    guardarProductosLocal();
-    guardarComprasLocal();
+    state.productos = {};
   }
 
   const comps = localStorage.getItem("inv_compras_v2");
-  if (comps) state.compras = JSON.parse(comps);
+  if (comps) {
+    try { state.compras = JSON.parse(comps); } catch(e) { state.compras = []; }
+  } else {
+    state.compras = [];
+  }
 
   const vts = localStorage.getItem("inv_ventas_v2");
   if (vts) state.ventas = JSON.parse(vts);
@@ -337,6 +259,11 @@ function cargarEstadoLocal() {
   if (cli) {
     try { state.clientes = JSON.parse(cli); } catch(e) { state.clientes = {}; }
   }
+
+  const ctas = localStorage.getItem("inv_cuentas_v2");
+  if (ctas) {
+    try { state.cuentas = JSON.parse(ctas); } catch(e) { state.cuentas = []; }
+  }
 }
 
 function guardarProductosLocal() {
@@ -350,6 +277,9 @@ function guardarVentasLocal() {
 }
 function guardarPedidosLocal() {
   localStorage.setItem("inv_pedidos_v2", JSON.stringify(state.pedidos));
+}
+function guardarCuentasLocal() {
+  localStorage.setItem("inv_cuentas_v2", JSON.stringify(state.cuentas));
 }
 function guardarFinanzasLocal() {
   localStorage.setItem("inv_finanzas_v2", JSON.stringify(state.movimientosDinero));
@@ -497,7 +427,7 @@ function calcularCostosPorCodigo(vista = state.vistaVendedor) {
 // NAVEGACIÓN Y VISTAS
 // ==========================================================================
 function cambiarVista(vista) {
-  const vistas = ["dashboard", "inventario", "ventas", "compras", "finanzas", "configuracion", "clientes"];
+  const vistas = ["dashboard", "inventario", "ventas", "compras", "finanzas", "configuracion", "clientes", "cuentas"];
   
   vistas.forEach(v => {
     const el = document.getElementById("view" + capitalizar(v));
@@ -521,6 +451,7 @@ function cambiarVista(vista) {
   if (vista === "ventas") renderizarCarrito();
   if (vista === "finanzas") renderizarFinanzas();
   if (vista === "clientes") renderizarClientes();
+  if (vista === "cuentas") renderizarCuentas();
   if (vista === "configuracion") {
     cargarConfigPuntosUI();
     const surl = document.getElementById("sheetsApiUrl");
@@ -553,6 +484,7 @@ function renderizarTodo() {
   renderizarCarrito();
   renderizarFinanzas();
   renderizarClientes();
+  renderizarCuentas();
   inicializarIconos();
 }
 
@@ -630,24 +562,46 @@ function renderizarDashboard() {
   if (state.ventas.length === 0) {
     recentCont.innerHTML = `<div class="text-center py-5 text-slate-500 text-xs">No hay ventas registradas aún.</div>`;
   } else {
-    const ultimas = state.ventas.slice(0, 6);
-    recentCont.innerHTML = ultimas.map(v => {
+    const ultimas = state.ventas.slice(0, 10);
+    recentCont.innerHTML = ultimas.map((v, idx) => {
       const fecha = v.fecha ? new Date(v.fecha).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : "";
       const vend = v.vendedor || "Carlos";
       const vendColor = vend === "Daniel" ? "text-violet-400 bg-violet-950/60 border-violet-500/30" : "text-blue-400 bg-blue-950/60 border-blue-500/30";
+      const totCRC = Number(v.totalCRC || 0);
+      const totUSD = Number(v.totalUSD || 0);
+      
+      // Identificador único para esta fila específica de venta
+      const vUid = v.id ? `${v.id}_${v.codigo || ''}_${idx}` : `VTA_ROW_${idx}`;
+      
+      // Verificar si ESTA venta exacta ya fue pasada a cuentas
+      const yaEnCuentas = (state.cuentas || []).some(cta => 
+        cta.referenciaId === vUid || 
+        (cta.referenciaId === v.id && (!cta.notas || cta.notas.includes(v.codigo || '')))
+      );
 
       return `
-        <div class="py-2 flex items-center justify-between border-b border-slate-800/60 last:border-0">
-          <div>
-            <div class="flex items-center gap-1.5 mb-0.5">
+        <div class="py-2.5 flex items-center justify-between border-b border-slate-800/60 last:border-0 gap-2">
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-1.5 mb-0.5 flex-wrap">
               <span class="text-[9px] font-bold px-1.5 py-0.2 rounded border ${vendColor}">👤 ${vend}</span>
-              <span class="text-xs font-bold text-white truncate max-w-[140px]">${v.cliente || "Venta"}</span>
+              <span class="text-xs font-bold text-white truncate max-w-[150px]">${v.cliente || "Venta General"}</span>
             </div>
-            <div class="text-[11px] text-slate-400 font-mono">${fecha} • ${v.items ? v.items.length : 1} prod(s) <span class="text-[10px] text-slate-500">(${v.metodoPago || "Efectivo"})</span></div>
+            <div class="text-[11px] text-slate-400 font-mono">
+              ${fecha} • ${v.nombre ? `${v.nombre} (${v.cantidad || 1}x)` : `${v.items ? v.items.length : 1} prod(s)`} <span class="text-[10px] text-slate-500">(${v.metodoPago || "Efectivo"})</span>
+            </div>
           </div>
-          <div class="text-right font-mono">
-            <div class="text-xs font-black text-emerald-400">${fmtCRC(v.totalCRC || 0)}</div>
-            <div class="text-[10px] text-slate-400">${fmtUSD(v.totalUSD || 0)}</div>
+          <div class="text-right font-mono shrink-0 space-y-0.5">
+            <div class="text-xs font-black text-emerald-400">${fmtCRC(totCRC)}</div>
+            <div class="text-[10px] text-slate-400">${fmtUSD(totUSD)}</div>
+            <div class="pt-0.5">
+              ${!yaEnCuentas ? `
+                <button onclick="pasarVentaIndividualACuentasPorCobrar(${idx})" title="Pasar a Cuentas por Cobrar" class="text-[9.5px] font-bold px-2 py-0.5 rounded bg-amber-950/60 hover:bg-amber-900 border border-amber-500/40 text-amber-300 active:scale-95 transition-all">
+                  + Cta Cobrar
+                </button>
+              ` : `
+                <span class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-indigo-950/60 border border-indigo-500/30 text-indigo-300">En Cuentas</span>
+              `}
+            </div>
           </div>
         </div>
       `;
@@ -1449,6 +1403,454 @@ function renderizarClientes() {
   inicializarIconos();
 }
 
+// ==========================================================================
+// MÓDULO: CUENTAS PENDIENTES (POR COBRAR Y POR PAGAR)
+// ==========================================================================
+
+function filtrarTipoCuenta(tipo) {
+  state.filtroTipoCuenta = tipo;
+  ["cobrar", "pagar", "todos"].forEach(t => {
+    const btn = document.getElementById("tabCuentas-" + t);
+    if (!btn) return;
+    if ((t === "cobrar" && tipo === "Por Cobrar") || (t === "pagar" && tipo === "Por Pagar") || (t === "todos" && tipo === "todos")) {
+      btn.className = "py-2 rounded-lg bg-emerald-600 text-white shadow-md text-center transition-all";
+    } else {
+      btn.className = "py-2 rounded-lg bg-transparent text-slate-400 hover:text-white text-center transition-all";
+    }
+  });
+  renderizarCuentas();
+}
+
+function renderizarCuentas() {
+  const cont = document.getElementById("listaCuentasPendientes");
+  if (!cont) return;
+
+  const q = (state.filtroCuentas || "").toLowerCase().trim();
+  const filtroTipo = state.filtroTipoCuenta || "Por Cobrar";
+
+  // Calcular métricas generales
+  let totCobrarCRC = 0, totCobrarUSD = 0, countCobrar = 0;
+  let totPagarCRC = 0, totPagarUSD = 0, countPagar = 0;
+
+  state.cuentas.forEach(cta => {
+    const saldoCRC = Number(cta.saldoPendienteCRC || 0);
+    const saldoUSD = Number(cta.saldoPendienteUSD || 0);
+    const estado = cta.estado || "Pendiente";
+
+    if (estado !== "Pagado" && saldoCRC > 0) {
+      if (cta.tipo === "Por Cobrar") {
+        totCobrarCRC += saldoCRC;
+        totCobrarUSD += saldoUSD;
+        countCobrar++;
+      } else {
+        totPagarCRC += saldoCRC;
+        totPagarUSD += saldoUSD;
+        countPagar++;
+      }
+    }
+  });
+
+  // Actualizar Cards de resumen
+  const elCobrarCRC = document.getElementById("cuentasTotalCobrarCRC");
+  const elCobrarUSD = document.getElementById("cuentasTotalCobrarUSD");
+  const elBadgeCobrar = document.getElementById("badgeCuentasCobrar");
+  if (elCobrarCRC) elCobrarCRC.textContent = fmtCRC(totCobrarCRC);
+  if (elCobrarUSD) elCobrarUSD.textContent = fmtUSD(totCobrarUSD);
+  if (elBadgeCobrar) elBadgeCobrar.textContent = countCobrar;
+
+  const elPagarCRC = document.getElementById("cuentasTotalPagarCRC");
+  const elPagarUSD = document.getElementById("cuentasTotalPagarUSD");
+  const elBadgePagar = document.getElementById("badgeCuentasPagar");
+  if (elPagarCRC) elPagarCRC.textContent = fmtCRC(totPagarCRC);
+  if (elPagarUSD) elPagarUSD.textContent = fmtUSD(totPagarUSD);
+  if (elBadgePagar) elBadgePagar.textContent = countPagar;
+
+  const elCountTotal = document.getElementById("cuentasCountTotal");
+  if (elCountTotal) elCountTotal.textContent = state.cuentas.length;
+
+  // Actualizar también widget en Dashboard
+  const dashCobrar = document.getElementById("dashCobrarCRC");
+  const dashPagar = document.getElementById("dashPagarCRC");
+  if (dashCobrar) dashCobrar.textContent = fmtCRC(totCobrarCRC);
+  if (dashPagar) dashPagar.textContent = fmtCRC(totPagarCRC);
+
+  // Filtrar lista para mostrar
+  let lista = state.cuentas.filter(cta => {
+    if (filtroTipo !== "todos" && cta.tipo !== filtroTipo) return false;
+    if (q) {
+      const ent = (cta.entidad || "").toLowerCase();
+      const tel = (cta.telefono || "").toLowerCase();
+      const ref = (cta.referenciaId || "").toLowerCase();
+      const not = (cta.notas || "").toLowerCase();
+      if (!ent.includes(q) && !tel.includes(q) && !ref.includes(q) && !not.includes(q)) return false;
+    }
+    return true;
+  });
+
+  // Ordenar: primero las pendientes con mayor saldo, luego las pagadas
+  lista.sort((a, b) => {
+    const aPag = a.estado === "Pagado" ? 1 : 0;
+    const bPag = b.estado === "Pagado" ? 1 : 0;
+    if (aPag !== bPag) return aPag - bPag;
+    return (Number(b.saldoPendienteCRC || 0)) - (Number(a.saldoPendienteCRC || 0));
+  });
+
+  if (lista.length === 0) {
+    cont.innerHTML = `
+      <div class="flex flex-col items-center justify-center py-10 text-slate-500 text-xs space-y-2 bg-slate-900/60 rounded-2xl border border-slate-800">
+        <i data-lucide="badge-check" class="w-10 h-10 stroke-1 text-slate-600"></i>
+        <span>${q ? "No hay cuentas que coincidan con la búsqueda." : "No hay cuentas registradas en esta sección."}</span>
+        <button onclick="abrirModalNuevaCuenta()" class="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-bold text-xs active:scale-95 mt-2">
+          ➕ Registrar cuenta pendiente
+        </button>
+      </div>
+    `;
+    inicializarIconos();
+    return;
+  }
+
+  cont.innerHTML = lista.map(cta => {
+    const esCobrar = cta.tipo === "Por Cobrar";
+    const esPagado = cta.estado === "Pagado" || (Number(cta.saldoPendienteCRC || 0) <= 0);
+    const badgeColor = esPagado
+      ? "bg-slate-800 text-slate-400 border-slate-700"
+      : (esCobrar ? "bg-emerald-950/80 text-emerald-300 border-emerald-500/40" : "bg-rose-950/80 text-rose-300 border-rose-500/40");
+    const estadoTexto = esPagado ? "✅ Liquidado" : (cta.estado === "Parcial" ? "⏳ Parcial" : "🔴 Pendiente");
+    const iconTipo = esCobrar ? "arrow-down-left" : "arrow-up-right";
+    const iconColor = esCobrar ? "text-emerald-400 bg-emerald-950/60" : "text-rose-400 bg-rose-950/60";
+
+    const saldoCRC = Number(cta.saldoPendienteCRC !== undefined ? cta.saldoPendienteCRC : cta.montoTotalCRC);
+    const saldoUSD = Number(cta.saldoPendienteUSD !== undefined ? cta.saldoPendienteUSD : cta.montoTotalUSD);
+    const totalCRC = Number(cta.montoTotalCRC || 0);
+
+    const fechaStr = cta.fecha ? new Date(cta.fecha).toLocaleDateString() : "";
+
+    return `
+      <div class="bg-gradient-to-br from-slate-900 via-slate-900/95 to-slate-950 border ${esPagado ? 'border-slate-800 opacity-70' : 'border-slate-700/90'} rounded-2xl p-3.5 shadow-lg space-y-2.5 transition-all">
+        <!-- Top row: Type badge, status, date -->
+        <div class="flex items-center justify-between gap-2">
+          <div class="flex items-center gap-1.5 min-w-0">
+            <span class="p-1 rounded-lg ${iconColor} flex items-center justify-center">
+              <i data-lucide="${iconTipo}" class="w-3.5 h-3.5"></i>
+            </span>
+            <span class="text-[10px] font-black uppercase px-2 py-0.5 rounded-full border ${badgeColor}">
+              ${cta.tipo}
+            </span>
+            <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700 font-mono">${estadoTexto}</span>
+          </div>
+          <span class="text-[10px] text-slate-500 font-mono shrink-0">${fechaStr}</span>
+        </div>
+
+        <!-- Middle: Entity Name, Phone, Ref, Notes -->
+        <div class="flex justify-between items-start gap-2">
+          <div class="min-w-0 flex-1">
+            <div class="text-xs font-black text-white truncate">${cta.entidad || 'Sin nombre'}</div>
+            <div class="text-[10px] text-slate-400 font-mono mt-0.5 flex items-center gap-2 flex-wrap">
+              ${cta.telefono ? `<span>📞 ${cta.telefono}</span>` : ''}
+              ${cta.referenciaId ? `<span>Ref: <b class="text-indigo-300">${cta.referenciaId}</b></span>` : ''}
+              ${cta.vendedor ? `<span>Vend: <b>${cta.vendedor}</b></span>` : ''}
+            </div>
+            ${cta.notas ? `<div class="text-[10px] text-slate-400 italic mt-1 bg-slate-950/60 p-1.5 rounded-lg border border-slate-800/80">${cta.notas}</div>` : ''}
+          </div>
+
+          <!-- Balance Amounts -->
+          <div class="text-right font-mono shrink-0">
+            <div class="text-[10px] text-slate-400">Saldo Pendiente:</div>
+            <div class="text-sm font-black ${esPagado ? 'text-slate-400 line-through' : (esCobrar ? 'text-emerald-400' : 'text-rose-400')}">${fmtCRC(saldoCRC)}</div>
+            <div class="text-[10px] text-slate-400">${fmtUSD(saldoUSD)}</div>
+            ${totalCRC > saldoCRC ? `<div class="text-[9px] text-slate-500">Total orig: ${fmtCRC(totalCRC)}</div>` : ''}
+          </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="flex items-center justify-between pt-2 border-t border-slate-800/80 gap-2">
+          <div class="flex items-center gap-1.5">
+            ${cta.telefono ? `
+              <a href="https://wa.me/506${cta.telefono.replace(/[^0-9]/g, '')}?text=Hola%20${encodeURIComponent(cta.entidad)},%20te%20saludamos%20de%20DC%20El%20Destape.%20Te%20recordamos%20el%20saldo%20pendiente%20de%20${encodeURIComponent(fmtCRC(saldoCRC))}.%20¡Pura%20vida!" target="_blank"
+                class="px-2 py-1 bg-emerald-950/60 hover:bg-emerald-900 border border-emerald-500/30 text-emerald-400 rounded-lg text-[10px] font-bold flex items-center gap-1 active:scale-95">
+                <i data-lucide="message-circle" class="w-3 h-3"></i>
+                <span>WhatsApp</span>
+              </a>
+            ` : ''}
+            <button onclick="eliminarCuenta('${cta.id}')" class="px-2 py-1 bg-slate-800 hover:bg-rose-950/60 text-slate-400 hover:text-rose-300 rounded-lg text-[10px] active:scale-95 transition-all">
+              Eliminar
+            </button>
+          </div>
+
+          ${!esPagado ? `
+            <div class="flex items-center gap-1.5">
+              <button onclick="abrirModalAbonoCuenta('${cta.id}')" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center gap-1 active:scale-95 shadow-md shadow-indigo-600/30">
+                <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                <span>Abonar</span>
+              </button>
+              <button onclick="liquidarCuentaDirecto('${cta.id}')" class="px-2.5 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/40 border border-emerald-500/40 text-emerald-300 rounded-xl text-xs font-bold flex items-center gap-1 active:scale-95">
+                <i data-lucide="check" class="w-3.5 h-3.5"></i>
+                <span>Liquidar</span>
+              </button>
+            </div>
+          ` : `
+            <span class="text-[10px] text-emerald-400 font-bold font-mono flex items-center gap-1">
+              <i data-lucide="check-circle" class="w-3.5 h-3.5"></i> Pagado totalmente
+            </span>
+          `}
+        </div>
+      </div>
+    `;
+  }).join("") + '<div class="h-6"></div>';
+
+  inicializarIconos();
+}
+
+// --- Abonos a Cuentas ---
+function abrirModalAbonoCuenta(idCuenta) {
+  const cta = state.cuentas.find(c => c.id === idCuenta);
+  if (!cta) return;
+
+  document.getElementById("abonoCuentaId").value = idCuenta;
+  document.getElementById("abonoEntidadNombre").textContent = `${cta.tipo}: ${cta.entidad}`;
+  
+  const saldoCRC = Number(cta.saldoPendienteCRC !== undefined ? cta.saldoPendienteCRC : cta.montoTotalCRC);
+  const saldoUSD = Number(cta.saldoPendienteUSD !== undefined ? cta.saldoPendienteUSD : cta.montoTotalUSD);
+
+  document.getElementById("abonoSaldoActualCRC").textContent = fmtCRC(saldoCRC);
+  document.getElementById("abonoSaldoActualUSD").textContent = fmtUSD(saldoUSD);
+
+  document.getElementById("abonoMontoCRC").value = "";
+  document.getElementById("abonoMontoUSD").value = "";
+  document.getElementById("abonoNota").value = "";
+
+  const modal = document.getElementById("modalAbonoCuenta");
+  if (modal) {
+    modal.classList.remove("hidden");
+    modal.classList.add("flex");
+  }
+  inicializarIconos();
+  setTimeout(() => document.getElementById("abonoMontoCRC").focus(), 150);
+}
+
+function cerrarModalAbonoCuenta() {
+  const modal = document.getElementById("modalAbonoCuenta");
+  if (modal) {
+    modal.classList.add("hidden");
+    modal.classList.remove("flex");
+  }
+}
+
+function llenarAbonoTotal() {
+  const idCuenta = document.getElementById("abonoCuentaId").value;
+  const cta = state.cuentas.find(c => c.id === idCuenta);
+  if (!cta) return;
+
+  const saldoCRC = Number(cta.saldoPendienteCRC !== undefined ? cta.saldoPendienteCRC : cta.montoTotalCRC);
+  const tc = Number(state.config.tipoCambio || 520);
+  const saldoUSD = parseFloat((saldoCRC / tc).toFixed(2));
+
+  document.getElementById("abonoMontoCRC").value = saldoCRC;
+  document.getElementById("abonoMontoUSD").value = saldoUSD;
+}
+
+function autoConvertirAbono(fuente) {
+  const tc = Number(state.config.tipoCambio || 520);
+  const inCRC = document.getElementById("abonoMontoCRC");
+  const inUSD = document.getElementById("abonoMontoUSD");
+
+  if (fuente === "CRC") {
+    const valCRC = parseFloat(inCRC.value) || 0;
+    inUSD.value = valCRC > 0 ? (valCRC / tc).toFixed(2) : "";
+  } else {
+    const valUSD = parseFloat(inUSD.value) || 0;
+    inCRC.value = valUSD > 0 ? Math.round(valUSD * tc) : "";
+  }
+}
+
+function guardarAbonoCuenta() {
+  const idCuenta = document.getElementById("abonoCuentaId").value;
+  const cta = state.cuentas.find(c => c.id === idCuenta);
+  if (!cta) return;
+
+  const abonoCRC = parseFloat(document.getElementById("abonoMontoCRC").value) || 0;
+  const abonoUSD = parseFloat(document.getElementById("abonoMontoUSD").value) || 0;
+  const metodo = document.getElementById("abonoMetodoPago").value;
+  const nota = document.getElementById("abonoNota").value.trim();
+
+  if (abonoCRC <= 0 && abonoUSD <= 0) {
+    mostrarToast("Ingresa un monto válido para el abono.", "error");
+    return;
+  }
+
+  const saldoAnteriorCRC = Number(cta.saldoPendienteCRC !== undefined ? cta.saldoPendienteCRC : cta.montoTotalCRC);
+  const saldoAnteriorUSD = Number(cta.saldoPendienteUSD !== undefined ? cta.saldoPendienteUSD : cta.montoTotalUSD);
+
+  const nuevoSaldoCRC = Math.max(0, saldoAnteriorCRC - abonoCRC);
+  const nuevoSaldoUSD = Math.max(0, saldoAnteriorUSD - abonoUSD);
+  const nuevoEstado = nuevoSaldoCRC <= 0 ? "Pagado" : "Parcial";
+
+  cta.saldoPendienteCRC = nuevoSaldoCRC;
+  cta.saldoPendienteUSD = nuevoSaldoUSD;
+  cta.estado = nuevoEstado;
+  const notaExtra = ` [Abono ₡${abonoCRC} (${metodo}) el ${new Date().toLocaleDateString()}${nota ? ': ' + nota : ''}]`;
+  cta.notas = (cta.notas || "") + notaExtra;
+
+  guardarCuentasLocal();
+
+  // Encolar acción para sincronizar con Google Sheets
+  encolarAccionSincronizacion("abonarCuenta", {
+    id: idCuenta,
+    abonoCRC,
+    abonoUSD,
+    notas: `${metodo} - ${nota}`
+  });
+
+  cerrarModalAbonoCuenta();
+  renderizarCuentas();
+
+  if (nuevoEstado === "Pagado") {
+    mostrarToast(`¡Cuenta de ${cta.entidad} liquidada completamente! 🎉`, "success");
+    if (window.confetti) window.confetti({ particleCount: 70, spread: 60, origin: { y: 0.8 } });
+  } else {
+    mostrarToast(`Abono de ${fmtCRC(abonoCRC)} registrado. Saldo restante: ${fmtCRC(nuevoSaldoCRC)} 💵`, "success");
+  }
+}
+
+function liquidarCuentaDirecto(idCuenta) {
+  const cta = state.cuentas.find(c => c.id === idCuenta);
+  if (!cta) return;
+
+  const saldoCRC = Number(cta.saldoPendienteCRC !== undefined ? cta.saldoPendienteCRC : cta.montoTotalCRC);
+  const saldoUSD = Number(cta.saldoPendienteUSD !== undefined ? cta.saldoPendienteUSD : cta.montoTotalUSD);
+
+  if (!confirm(`¿Confirmas liquidar el saldo total de ${fmtCRC(saldoCRC)} de ${cta.entidad}?`)) return;
+
+  cta.saldoPendienteCRC = 0;
+  cta.saldoPendienteUSD = 0;
+  cta.estado = "Pagado";
+  cta.notas = (cta.notas || "") + ` [Liquidado total ₡${saldoCRC} el ${new Date().toLocaleDateString()}]`;
+
+  guardarCuentasLocal();
+  encolarAccionSincronizacion("abonarCuenta", {
+    id: idCuenta,
+    abonoCRC: saldoCRC,
+    abonoUSD: saldoUSD,
+    notas: "Liquidación completa"
+  });
+
+  renderizarCuentas();
+  mostrarToast(`¡Cuenta de ${cta.entidad} liquidada totalmente! 🎉`, "success");
+  if (window.confetti) window.confetti({ particleCount: 70, spread: 60, origin: { y: 0.8 } });
+}
+
+function eliminarCuenta(idCuenta) {
+  if (!confirm("¿Deseas eliminar este registro de cuenta pendiente?")) return;
+  state.cuentas = state.cuentas.filter(c => c.id !== idCuenta);
+  guardarCuentasLocal();
+  renderizarCuentas();
+  mostrarToast("Cuenta eliminada.", "info");
+  encolarAccionSincronizacion("eliminarCuenta", { id: idCuenta });
+}
+
+// --- Crear Cuenta Manual ---
+function setTipoNuevaCuenta(tipo) {
+  document.getElementById("nuevaCtaTipo").value = tipo;
+  const btnCobrar = document.getElementById("btnTipoCtaCobrar");
+  const btnPagar = document.getElementById("btnTipoCtaPagar");
+  const lbl = document.getElementById("lblNuevaCtaEntidad");
+
+  if (tipo === "Por Cobrar") {
+    btnCobrar.className = "py-2.5 rounded-xl bg-emerald-600 text-white text-center border border-transparent";
+    btnPagar.className = "py-2.5 rounded-xl bg-slate-800 text-slate-400 text-center border border-slate-700";
+    if (lbl) lbl.textContent = "Nombre del Cliente *";
+  } else {
+    btnPagar.className = "py-2.5 rounded-xl bg-rose-600 text-white text-center border border-transparent";
+    btnCobrar.className = "py-2.5 rounded-xl bg-slate-800 text-slate-400 text-center border border-slate-700";
+    if (lbl) lbl.textContent = "Nombre del Proveedor *";
+  }
+}
+
+function abrirModalNuevaCuenta() {
+  document.getElementById("nuevaCtaEntidad").value = "";
+  document.getElementById("nuevaCtaTelefono").value = "";
+  document.getElementById("nuevaCtaMontoCRC").value = "";
+  document.getElementById("nuevaCtaMontoUSD").value = "";
+  document.getElementById("nuevaCtaVencimiento").value = "";
+  document.getElementById("nuevaCtaNotas").value = "";
+  setTipoNuevaCuenta("Por Cobrar");
+
+  const modal = document.getElementById("modalNuevaCuenta");
+  if (modal) {
+    modal.classList.remove("hidden");
+    modal.classList.add("flex");
+  }
+  inicializarIconos();
+}
+
+function cerrarModalNuevaCuenta() {
+  const modal = document.getElementById("modalNuevaCuenta");
+  if (modal) {
+    modal.classList.add("hidden");
+    modal.classList.remove("flex");
+  }
+}
+
+function autoConvertirNuevaCta(fuente) {
+  const tc = Number(state.config.tipoCambio || 520);
+  const inCRC = document.getElementById("nuevaCtaMontoCRC");
+  const inUSD = document.getElementById("nuevaCtaMontoUSD");
+
+  if (fuente === "CRC") {
+    const valCRC = parseFloat(inCRC.value) || 0;
+    inUSD.value = valCRC > 0 ? (valCRC / tc).toFixed(2) : "";
+  } else {
+    const valUSD = parseFloat(inUSD.value) || 0;
+    inCRC.value = valUSD > 0 ? Math.round(valUSD * tc) : "";
+  }
+}
+
+function guardarNuevaCuentaManual() {
+  const tipo = document.getElementById("nuevaCtaTipo").value || "Por Cobrar";
+  const entidad = document.getElementById("nuevaCtaEntidad").value.trim();
+  const telefono = document.getElementById("nuevaCtaTelefono").value.trim();
+  const montoCRC = parseFloat(document.getElementById("nuevaCtaMontoCRC").value) || 0;
+  const montoUSD = parseFloat(document.getElementById("nuevaCtaMontoUSD").value) || 0;
+  const vencimiento = document.getElementById("nuevaCtaVencimiento").value;
+  const vendedor = document.getElementById("nuevaCtaVendedor").value || "Carlos";
+  const notas = document.getElementById("nuevaCtaNotas").value.trim();
+
+  if (!entidad) {
+    mostrarToast("Ingresa el nombre del cliente o proveedor.", "error");
+    return;
+  }
+  if (montoCRC <= 0 && montoUSD <= 0) {
+    mostrarToast("Ingresa un monto válido.", "error");
+    return;
+  }
+
+  const id = "CTA-" + Date.now().toString().slice(-6);
+  const cuentaObj = {
+    id,
+    fecha: new Date().toISOString(),
+    tipo,
+    entidad,
+    telefono,
+    referenciaId: "MANUAL",
+    montoTotalCRC: montoCRC,
+    montoTotalUSD: montoUSD,
+    saldoPendienteCRC: montoCRC,
+    saldoPendienteUSD: montoUSD,
+    estado: "Pendiente",
+    fechaVencimiento: vencimiento,
+    vendedor,
+    notas
+  };
+
+  state.cuentas.unshift(cuentaObj);
+  guardarCuentasLocal();
+  encolarAccionSincronizacion("registrarCuenta", { cuenta: cuentaObj });
+
+  cerrarModalNuevaCuenta();
+  renderizarCuentas();
+  mostrarToast(`Cuenta pendiente para ${entidad} guardada con éxito 📋`, "success");
+}
+
 // --- Editar precio de ítem en el carrito ---
 function editarPrecioCarrito(codigo) {
   const item = state.carrito.find(i => i.codigo === codigo);
@@ -2145,13 +2547,16 @@ async function guardarCompra() {
 
   const idCompra = "CMP-" + Date.now().toString().slice(-6);
 
+  const esCredito = document.getElementById("compraEsCredito") ? document.getElementById("compraEsCredito").checked : false;
+
   const compraObj = {
     id: idCompra,
     codigo: items[0].codigo,
     nombre: items.length === 1 ? items[0].nombre : `${items[0].nombre} +${items.length - 1} licores`,
     fecha,
     vendedor,
-    pagadoPor,
+    pagadoPor: esCredito ? "Pendiente (Crédito)" : pagadoPor,
+    esCredito,
     cantidad: totalCant,
     costoUnitarioUSD: totalUSD / (totalCant || 1),
     tipoCambio: tc,
@@ -2167,24 +2572,49 @@ async function guardarCompra() {
   state.compras.unshift(compraObj);
   guardarComprasLocal();
 
-  // 2. Limpiar lista de compra actual y campos
+  // 2. Si es a crédito, registrar automáticamente en Cuentas por Pagar
+  if (esCredito) {
+    const cuentaObj = {
+      id: "CTA-" + Date.now().toString().slice(-6),
+      fecha,
+      tipo: "Por Pagar",
+      entidad: proveedor || "Proveedor General",
+      telefono: "",
+      referenciaId: idCompra,
+      montoTotalCRC: totalCRC,
+      montoTotalUSD: totalUSD,
+      saldoPendienteCRC: totalCRC,
+      saldoPendienteUSD: totalUSD,
+      estado: "Pendiente",
+      fechaVencimiento: "",
+      vendedor,
+      notas: `Compra ${idCompra} (${compraObj.nombre}) a crédito a proveedor`
+    };
+    state.cuentas.unshift(cuentaObj);
+    guardarCuentasLocal();
+    encolarAccionSincronizacion("registrarCuenta", { cuenta: cuentaObj });
+  }
+
+  // 3. Limpiar lista de compra actual y campos
   state.listaCompraActual = [];
   document.getElementById("compraProveedor").value = "";
   document.getElementById("compraNotas").value = "";
+  const chkCredito = document.getElementById("compraEsCredito");
+  if (chkCredito) chkCredito.checked = false;
   limpiarSeleccionProductoCompra(false);
   renderizarListaCompraActual();
 
-  // 3. Re-renderizar todo
+  // 4. Re-renderizar todo
   renderizarTodo();
   
-  const detallePago = pagadoPor === "Empresa" ? "Caja Empresa" : `Financiada por ${pagadoPor}`;
+  const detallePago = esCredito ? "A Crédito (Registrado en Cuentas por Pagar)" : (pagadoPor === "Empresa" ? "Caja Empresa" : `Financiada por ${pagadoPor}`);
   mostrarToast(`¡Compra de ${totalCant} botellas guardada! (${detallePago}) 📦`, "success");
 
   if (window.confetti) {
     window.confetti({ particleCount: 70, spread: 60, origin: { y: 0.8 } });
   }
 
-  // 4. Encolar y sincronizar con Google Sheets
+  // 5. Encolar y sincronizar con Google Sheets
   encolarAccionSincronizacion("registrarCompra", { compra: compraObj });
 }
 
@@ -2197,6 +2627,119 @@ async function eliminarCompra(id) {
 
   // Encolar y sincronizar
   encolarAccionSincronizacion("eliminarCompra", { id });
+}
+
+function pasarCompraACuentasPorPagar(idCompra) {
+  const c = state.compras.find(x => x.id === idCompra);
+  if (!c) return;
+
+  // Verificar si ya existe en cuentas
+  const yaExiste = state.cuentas.find(cta => cta.referenciaId === idCompra && cta.tipo === "Por Pagar");
+  if (yaExiste) {
+    mostrarToast("Esta compra ya está registrada en Cuentas por Pagar.", "info");
+    cambiarVista("cuentas");
+    return;
+  }
+
+  const cant = Number(c.cantidad || 0);
+  const cUSD = Number(c.costoUnitarioUSD || 0);
+  const tc = Number(c.tipoCambio || state.config.tipoCambio || 520);
+  const cCRC = Number(c.costoUnitarioCRC || (cUSD * tc));
+  const totUSD = Number(c.totalUSD || (cant * cUSD));
+  const totCRC = Number(c.totalCRC || (cant * cCRC));
+
+  const cuentaObj = {
+    id: "CTA-" + Date.now().toString().slice(-6),
+    fecha: c.fecha || todayStr(),
+    tipo: "Por Pagar",
+    entidad: c.proveedor || "Proveedor General",
+    telefono: "",
+    referenciaId: c.id,
+    montoTotalCRC: totCRC,
+    montoTotalUSD: totUSD,
+    saldoPendienteCRC: totCRC,
+    saldoPendienteUSD: totUSD,
+    estado: "Pendiente",
+    fechaVencimiento: "",
+    vendedor: c.vendedor || "Carlos",
+    notas: `Compra ${c.id} (${c.nombre || c.codigo}) agregada a cuentas por pagar`
+  };
+
+  state.cuentas.unshift(cuentaObj);
+  guardarCuentasLocal();
+  encolarAccionSincronizacion("registrarCuenta", { cuenta: cuentaObj });
+  renderizarTodo();
+  mostrarToast(`Compra ${c.id} agregada a Cuentas por Pagar 📋`, "success");
+  cambiarVista("cuentas");
+}
+
+function pasarVentaIndividualACuentasPorCobrar(idxVenta) {
+  const v = state.ventas[idxVenta];
+  if (!v) {
+    mostrarToast("Venta no encontrada.", "error");
+    return;
+  }
+
+  const vUid = v.id ? `${v.id}_${v.codigo || ''}_${idxVenta}` : `VTA_ROW_${idxVenta}`;
+
+  // Verificar si ESTA venta exacta ya existe en cuentas
+  const yaExiste = (state.cuentas || []).find(cta => 
+    cta.referenciaId === vUid || 
+    (cta.referenciaId === v.id && (!cta.notas || cta.notas.includes(v.codigo || '')))
+  );
+  
+  if (yaExiste) {
+    mostrarToast("Esta venta ya está registrada en Cuentas por Cobrar.", "info");
+    cambiarVista("cuentas");
+    return;
+  }
+
+  const totCRC = Number(v.totalCRC || 0);
+  const totUSD = Number(v.totalUSD || 0);
+  const cliNombre = v.cliente || "Cliente General";
+  const nombreProd = v.nombre || (v.codigo ? `Licor (${v.codigo})` : "Venta");
+  const cantProd = Number(v.cantidad || 1);
+  
+  // Buscar teléfono si está en el maestro de clientes
+  let tel = "";
+  if (v.clienteTelefono) {
+    tel = v.clienteTelefono;
+  } else if (state.clientes) {
+    const matchCli = Object.values(state.clientes).find(c => c.nombre && c.nombre.toLowerCase() === cliNombre.toLowerCase());
+    if (matchCli) tel = matchCli.telefono || "";
+  }
+
+  const cuentaObj = {
+    id: "CTA-" + Date.now().toString().slice(-6),
+    fecha: v.fecha || new Date().toISOString(),
+    tipo: "Por Cobrar",
+    entidad: cliNombre,
+    telefono: tel,
+    referenciaId: vUid, // ID único por fila para no colisionar con otras ventas del mismo cliente
+    montoTotalCRC: totCRC,
+    montoTotalUSD: totUSD,
+    saldoPendienteCRC: totCRC,
+    saldoPendienteUSD: totUSD,
+    estado: "Pendiente",
+    fechaVencimiento: "",
+    vendedor: v.vendedor || "Carlos",
+    notas: `Venta: ${cantProd}x ${nombreProd} (${v.metodoPago || 'Efectivo'})`
+  };
+
+  if (!state.cuentas) state.cuentas = [];
+  state.cuentas.unshift(cuentaObj);
+  guardarCuentasLocal();
+  encolarAccionSincronizacion("registrarCuenta", { cuenta: cuentaObj });
+  renderizarTodo();
+  mostrarToast(`Venta (${cantProd}x ${nombreProd}) de ${cliNombre} agregada a Cuentas por Cobrar 📋`, "success");
+  cambiarVista("cuentas");
+}
+
+function pasarVentaACuentasPorCobrar(idVenta) {
+  const idx = state.ventas.findIndex(x => x.id === idVenta);
+  if (idx !== -1) {
+    pasarVentaIndividualACuentasPorCobrar(idx);
+  }
 }
 
 function renderizarHistorialCompras() {
@@ -2219,12 +2762,15 @@ function renderizarHistorialCompras() {
     const cUSD = Number(c.costoUnitarioUSD || 0);
     const tc = Number(c.tipoCambio || state.config.tipoCambio || 520);
     const cCRC = Number(c.costoUnitarioCRC || (cUSD * tc));
-    const totUSD = cant * cUSD;
-    const totCRC = cant * cCRC;
+    const totUSD = Number(c.totalUSD || (cant * cUSD));
+    const totCRC = Number(c.totalCRC || (cant * cCRC));
     const vend = c.vendedor || "Carlos";
     const pagador = c.pagadoPor || vend;
     const vendColor = vend === "Daniel" ? "text-violet-400 bg-violet-950/60 border-violet-500/30" : "text-blue-400 bg-blue-950/60 border-blue-500/30";
-    const pagoColor = pagador === "Empresa" ? "text-emerald-300 bg-emerald-950/60 border-emerald-500/30" : pagador === "Daniel" ? "text-violet-300 bg-violet-950/60 border-violet-500/30" : "text-blue-300 bg-blue-950/60 border-blue-500/30";
+    const esPend = pagador.includes("Crédito") || pagador.includes("Pendiente") || c.esCredito;
+    const pagoColor = esPend ? "text-amber-300 bg-amber-950/60 border-amber-500/40" : (pagador === "Empresa" ? "text-emerald-300 bg-emerald-950/60 border-emerald-500/30" : pagador === "Daniel" ? "text-violet-300 bg-violet-950/60 border-violet-500/30" : "text-blue-300 bg-blue-950/60 border-blue-500/30");
+
+    const yaEnCuentas = state.cuentas.some(cta => cta.referenciaId === c.id && cta.tipo === "Por Pagar");
 
     return `
       <div class="p-2.5 bg-slate-900/80 rounded-xl border border-slate-800 flex justify-between items-center gap-2">
@@ -2235,12 +2781,21 @@ function renderizarHistorialCompras() {
             <span class="text-[10px] text-slate-400 font-mono">${c.fecha || todayStr()}</span>
           </div>
           <div class="font-bold text-white truncate text-xs">${nombre} <span class="text-emerald-400 font-mono font-black">(+${cant})</span></div>
-          <div class="text-[10px] text-slate-500 font-mono">${c.codigo} • TC: ₡${tc}</div>
+          <div class="text-[10px] text-slate-500 font-mono">${c.codigo} • Proveedor: <b>${c.proveedor || "General"}</b></div>
         </div>
-        <div class="text-right font-mono shrink-0 ml-2">
+        <div class="text-right font-mono shrink-0 ml-2 space-y-1">
           <div class="font-black text-white text-xs">${fmtUSD(totUSD)}</div>
           <div class="text-[10px] text-slate-400">${fmtCRC(totCRC)}</div>
-          <button onclick="eliminarCompra('${c.id}')" class="text-[10px] text-rose-400 hover:text-rose-300">Eliminar</button>
+          <div class="flex items-center justify-end gap-1.5 pt-0.5">
+            ${!yaEnCuentas ? `
+              <button onclick="pasarCompraACuentasPorPagar('${c.id}')" title="Agregar a Cuentas por Pagar" class="text-[10px] text-amber-400 hover:text-amber-300 font-bold bg-amber-950/40 px-1.5 py-0.5 rounded border border-amber-500/30">
+                + Cta Pagar
+              </button>
+            ` : `
+              <span class="text-[9px] text-emerald-400 font-bold font-sans">En Cuentas</span>
+            `}
+            <button onclick="eliminarCompra('${c.id}')" class="text-[10px] text-rose-400 hover:text-rose-300">Eliminar</button>
+          </div>
         </div>
       </div>
     `;
@@ -2528,18 +3083,33 @@ function renderizarCarrito() {
 function setPaymentMethod(metodo) {
   state.metodoPagoSeleccionado = metodo;
   document.querySelectorAll(".pay-btn").forEach(btn => {
-    if (btn.textContent.includes(metodo.split(" ")[0])) {
+    const txt = btn.textContent.trim().toLowerCase();
+    const target = metodo.toLowerCase();
+    if (txt.includes(target) || (target === "sinpe / transf." && txt.includes("sinpe")) || (target === "pago luego" && txt.includes("luego"))) {
       btn.classList.add("active");
+      btn.classList.remove("bg-slate-900", "text-slate-300");
+      if (metodo === "Pago Luego") {
+        btn.classList.add("bg-amber-600", "text-white");
+      } else {
+        btn.classList.add("bg-indigo-600", "text-white");
+      }
     } else {
-      btn.classList.remove("active");
+      btn.classList.remove("active", "bg-indigo-600", "bg-amber-600", "text-white");
+      btn.classList.add("bg-slate-900", "text-slate-300");
     }
   });
 
   const cashHelper = document.getElementById("cashHelper");
-  if (metodo === "Efectivo") {
-    cashHelper.classList.remove("hidden");
-  } else {
-    cashHelper.classList.add("hidden");
+  const pagoLuegoHelper = document.getElementById("pagoLuegoHelper");
+
+  if (cashHelper) {
+    if (metodo === "Efectivo") cashHelper.classList.remove("hidden");
+    else cashHelper.classList.add("hidden");
+  }
+
+  if (pagoLuegoHelper) {
+    if (metodo === "Pago Luego") pagoLuegoHelper.classList.remove("hidden");
+    else pagoLuegoHelper.classList.add("hidden");
   }
 }
 
@@ -2671,6 +3241,30 @@ async function completarVenta() {
   state.ventas.unshift(ventaObj);
   guardarVentasLocal();
   state.ultimaVentaCompletada = ventaObj;
+
+  // --- Si es "Pago Luego", crear automáticamente registro en Cuentas por Cobrar ---
+  if (state.metodoPagoSeleccionado === "Pago Luego") {
+    const cuentaObj = {
+      id: "CTA-" + Date.now().toString().slice(-6),
+      fecha: ventaObj.fecha,
+      tipo: "Por Cobrar",
+      entidad: clienteNombre,
+      telefono: clienteTelefono || "",
+      referenciaId: idVenta,
+      montoTotalCRC: totalFinalCRC,
+      montoTotalUSD: totalUSD,
+      saldoPendienteCRC: totalFinalCRC,
+      saldoPendienteUSD: totalUSD,
+      estado: "Pendiente",
+      fechaVencimiento: "",
+      vendedor,
+      notas: `Venta POS ${idVenta} a crédito / pago posterior`
+    };
+    state.cuentas.unshift(cuentaObj);
+    guardarCuentasLocal();
+    encolarAccionSincronizacion("registrarCuenta", { cuenta: cuentaObj });
+    mostrarToast(`Venta guardada y añadida a Cuentas por Cobrar (${clienteNombre}) 📋`, "info");
+  }
 
   if (window.confetti) {
     window.confetti({ particleCount: 80, spread: 60, origin: { y: 0.8 } });
@@ -3754,9 +4348,13 @@ async function procesarColaSincronizacion(mostrarFeedback = false) {
     }
 
     if (state.colaSincronizacion.length === 0) {
-      mostrarToast("¡Todos los cambios sin internet se sincronizaron con Google Sheets! 🚀", "success");
-      // Descargar datos consolidados
-      await sincronizarConSheets(false);
+      if (mostrarFeedback) {
+        mostrarToast("¡Todos los cambios sin internet se sincronizaron con Google Sheets! 🚀", "success");
+      }
+      // Descargar datos frescos sin volver a procesar cola (ya está vacía)
+      sincronizandoCola = false; // liberar flag antes del GET
+      await _descargarDatosSheets(false);
+      return;
     } else {
       mostrarToast(`Quedan ${state.colaSincronizacion.length} cambios pendientes por sincronizar.`, "info");
     }
@@ -3852,29 +4450,24 @@ async function enviarPeticionSheets(accion, datos = {}) {
   }
 }
 
-async function sincronizarConSheets(mostrarMensaje = true) {
-  // Si hay cambios pendientes en la cola, procesarlos primero
-  if (state.colaSincronizacion && state.colaSincronizacion.length > 0) {
-    return await procesarColaSincronizacion(mostrarMensaje);
-  }
-
-  if (!state.config.sheetsUrl) {
-    if (mostrarMensaje) mostrarToast("Configura la URL de Google Sheets en Ajustes.", "error");
-    return;
-  }
-
-  if (!navigator.onLine) {
-    if (mostrarMensaje) mostrarToast("Sin conexión a internet. Los datos locales están seguros.", "info");
-    return;
-  }
+async function _descargarDatosSheets(mostrarMensaje = false) {
+  if (!state.config.sheetsUrl) return;
+  if (!navigator.onLine) return;
 
   const icon = document.getElementById("syncIcon");
   if (icon) icon.classList.add("animate-spin");
 
   try {
-    const url = `${state.config.sheetsUrl}?action=getTodo`;
-    const resp = await fetch(url);
+    const url = `${state.config.sheetsUrl}?action=getTodo&t=${Date.now()}`;
+    const resp = await fetch(url, { cache: "no-store" });
     const json = await resp.json();
+
+    console.log("[SYNC] Respuesta de Sheets:", JSON.stringify({ 
+      success: json.success, 
+      pedidosCount: json.data ? (json.data.pedidos || []).length : "N/A",
+      productosCount: json.data ? (json.data.productos || []).length : "N/A",
+      pedidosPrimeros: json.data && json.data.pedidos ? json.data.pedidos.slice(0,2) : []
+    }));
 
     if (json.success && json.data) {
       if (json.data.productos && json.data.productos.length > 0) {
@@ -3883,24 +4476,22 @@ async function sincronizarConSheets(mostrarMensaje = true) {
         state.productos = mapa;
         guardarProductosLocal();
       }
-      if (json.data.ultimasCompras) {
+      if (json.data.ultimasCompras && json.data.ultimasCompras.length > 0) {
         state.compras = json.data.ultimasCompras;
         guardarComprasLocal();
       }
-      if (json.data.ultimasVentas) {
+      if (json.data.ultimasVentas && json.data.ultimasVentas.length > 0) {
         state.ventas = json.data.ultimasVentas;
         guardarVentasLocal();
       }
-      if (json.data.finanzas) {
+      if (json.data.finanzas && json.data.finanzas.length > 0) {
         state.movimientosDinero = json.data.finanzas;
         guardarFinanzasLocal();
       }
       if (json.data.clientes) {
         const mapaCli = {};
         if (Array.isArray(json.data.clientes)) {
-          json.data.clientes.forEach(c => {
-            if (c.id) mapaCli[c.id] = c;
-          });
+          json.data.clientes.forEach(c => { if (c.id) mapaCli[c.id] = c; });
         } else if (typeof json.data.clientes === "object") {
           Object.assign(mapaCli, json.data.clientes);
         }
@@ -3909,20 +4500,57 @@ async function sincronizarConSheets(mostrarMensaje = true) {
           guardarClientesLocal();
         }
       }
+      // Pedidos: fusionar Sheets + pendientes locales en cola
       if (json.data.pedidos && Array.isArray(json.data.pedidos)) {
-        state.pedidos = json.data.pedidos;
+        const idsPedidosSheets = new Set(json.data.pedidos.map(p => p.id));
+        const pedidosSoloLocales = (state.pedidos || []).filter(p =>
+          !idsPedidosSheets.has(p.id) &&
+          (state.colaSincronizacion || []).some(q => q.datos && q.datos.pedido && q.datos.pedido.id === p.id)
+        );
+        state.pedidos = [...json.data.pedidos, ...pedidosSoloLocales];
         guardarPedidosLocal();
+        console.log("[SYNC] Pedidos cargados:", state.pedidos.length, "| Locales pendientes cola:", pedidosSoloLocales.length);
+      }
+      if (json.data.cuentas && Array.isArray(json.data.cuentas)) {
+        state.cuentas = json.data.cuentas;
+        guardarCuentasLocal();
       }
 
       renderizarTodo();
       actualizarBadgeConexion();
-      if (mostrarMensaje) mostrarToast("📊 ¡Sincronizado con Google Sheets! 📊", "success");
+      if (mostrarMensaje) {
+        const nPed = (state.pedidos || []).filter(p => p.estado === "pendiente" || !p.estado).length;
+        mostrarToast(`📊 Sincronizado — ${nPed} encargo(s) pendiente(s)`, "success");
+      }
+    } else {
+      console.warn("[SYNC] Respuesta inesperada:", json);
+      if (mostrarMensaje) mostrarToast("Error: Sheets no devolvió datos válidos.", "error");
     }
   } catch (err) {
-    if (mostrarMensaje) mostrarToast("Error al conectar con Google Sheets.", "error");
+    console.error("[SYNC] Error al conectar:", err);
+    if (mostrarMensaje) mostrarToast("Error al conectar con Google Sheets: " + err.message, "error");
   } finally {
     if (icon) icon.classList.remove("animate-spin");
   }
+}
+
+async function sincronizarConSheets(mostrarMensaje = true) {
+  if (!state.config.sheetsUrl) {
+    if (mostrarMensaje) mostrarToast("Configura la URL de Google Sheets en Ajustes.", "error");
+    return;
+  }
+  if (!navigator.onLine) {
+    if (mostrarMensaje) mostrarToast("Sin conexión a internet. Los datos locales están seguros.", "info");
+    return;
+  }
+
+  // Subir cola en segundo plano (sin bloquear el GET de descarga)
+  if (state.colaSincronizacion && state.colaSincronizacion.length > 0) {
+    procesarColaSincronizacion(false);
+  }
+
+  // Siempre descargar datos frescos (pedidos, productos, clientes, etc.)
+  await _descargarDatosSheets(mostrarMensaje);
 }
 
 function guardarConfiguracionSheets() {
@@ -3947,6 +4575,46 @@ async function probarConexionSheets() {
     if (json.success) mostrarToast("¡Conexión Exitosa con Google Sheets! 🎉", "success");
   } catch(e) {
     mostrarToast("Verifica que la Web App tenga acceso público.", "error");
+  }
+}
+
+async function diagnosticarPedidos() {
+  if (!state.config.sheetsUrl) {
+    mostrarToast("Ingresa la URL de Sheets en Ajustes.", "error");
+    return;
+  }
+  mostrarToast("Consultando encargos en Sheets...", "info");
+  try {
+    const resp = await fetch(`${state.config.sheetsUrl}?action=getPedidos&t=${Date.now()}`, { cache: "no-store" });
+    const json = await resp.json();
+    console.log("[DIAG] getPedidos completo:", json);
+
+    if (json && json.success) {
+      let listaPedidos = [];
+      if (Array.isArray(json.data)) {
+        listaPedidos = json.data;
+      } else if (json.data && Array.isArray(json.data.pedidos)) {
+        listaPedidos = json.data.pedidos;
+      }
+
+      const total = listaPedidos.length;
+      const pendientes = listaPedidos.filter(p => p.estado === "pendiente" || !p.estado).length;
+      
+      state.pedidos = listaPedidos;
+      guardarPedidosLocal();
+      renderizarTodo();
+
+      if (total === 0) {
+        mostrarToast("⚠️ La hoja Pedidos está creada en Sheets pero no tiene filas con encargos.", "info");
+      } else {
+        mostrarToast(`✅ ${total} encargo(s) sincronizado(s) (${pendientes} pendiente(s))`, "success");
+      }
+    } else {
+      mostrarToast("❌ Error en respuesta: " + JSON.stringify(json).slice(0, 120), "error");
+    }
+  } catch(e) {
+    mostrarToast("❌ Error de red: " + e.message, "error");
+    console.error("[DIAG] Error:", e);
   }
 }
 
@@ -4008,27 +4676,18 @@ function cargarConfigPuntosUI() {
   if (minimoEl) minimoEl.value = c.puntosMinimosCanje || 4000;
 }
 
-function recargarCatalogoSemilla() {
-  if (confirm("¿Restaurar el catálogo con los 54 licores originales?")) {
-    const mapa = {};
-    SEED_PRODUCTS.forEach(p => { mapa[p.codigo] = p; });
-    state.productos = mapa;
-    state.compras = [...SEED_PURCHASES];
-    state.ventas = [];
-    state.movimientosDinero = [];
-    state.colaSincronizacion = [];
-    guardarProductosLocal();
-    guardarComprasLocal();
-    guardarVentasLocal();
-    guardarFinanzasLocal();
-    guardarColaLocal();
-    renderizarTodo();
-    mostrarToast("Catálogo de 54 licores restaurado.", "info");
+async function recargarCatalogoSemilla() {
+  if (confirm("¿Descargar y actualizar todos los datos limpios directamente desde Google Sheets?")) {
+    if (!state.config.sheetsUrl) {
+      mostrarToast("Debes ingresar la URL de Google Sheets primero en Ajustes.", "error");
+      return;
+    }
+    await sincronizarConSheets(true);
   }
 }
 
 function limpiarCacheLocal() {
-  if (confirm("¿Borrar todos los datos locales?")) {
+  if (confirm("¿Borrar todos los datos locales y reiniciar la aplicación?")) {
     localStorage.clear();
     location.reload();
   }

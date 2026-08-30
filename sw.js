@@ -1,4 +1,4 @@
-const CACHE_NAME = 'inventory-sheets-v9';
+const CACHE_NAME = 'inventory-sheets-v18';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -49,8 +49,14 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = event.request.url;
 
-  // Never cache Google Apps Script API calls in service worker (handled by offline queue in app.js)
-  if (event.request.method !== 'GET' || url.includes('script.google.com') || url.includes('googleusercontent.com')) {
+  // Nunca cachear: API Google, imágenes de Drive, ni peticiones POST
+  if (
+    event.request.method !== 'GET' ||
+    url.includes('script.google.com') ||
+    url.includes('googleusercontent.com') ||
+    url.includes('drive.google.com/thumbnail') ||
+    url.includes('drive.google.com/uc')
+  ) {
     return;
   }
 
