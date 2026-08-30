@@ -908,11 +908,11 @@
             </label>
             <div class="flex items-center gap-2">
               <span class="text-slate-400 font-mono shrink-0">Cada</span>
-              <input type="number" id="puntosRazonCRCInput" min="1" step="50" placeholder="100"
+              <input type="number" id="puntosRazonCRCInput" min="1" step="5" placeholder="20"
                 class="flex-1 px-3 py-2 bg-slate-900 border border-amber-500/40 rounded-xl text-white font-mono font-bold focus:outline-none focus:border-amber-400">
               <span class="text-slate-400 font-mono shrink-0">₡ = 1 punto</span>
             </div>
-            <p class="text-[10px] text-slate-500 mt-1">Ej: 100 significa que cada ₡100 gastados = 1 punto</p>
+            <p class="text-[10px] text-slate-500 mt-1">Ej: 20 significa que cada ₡20 gastados = 1 punto</p>
           </div>
 
           <!-- puntosValorCRC -->
@@ -922,11 +922,11 @@
             </label>
             <div class="flex items-center gap-2">
               <span class="text-slate-400 font-mono shrink-0">1 punto =</span>
-              <input type="number" id="puntosValorCRCInput" min="1" step="1" placeholder="5"
+              <input type="number" id="puntosValorCRCInput" min="1" step="1" placeholder="1"
                 class="flex-1 px-3 py-2 bg-slate-900 border border-amber-500/40 rounded-xl text-white font-mono font-bold focus:outline-none focus:border-amber-400">
               <span class="text-slate-400 font-mono shrink-0">₡ descuento</span>
             </div>
-            <p class="text-[10px] text-slate-500 mt-1">Ej: 5 significa que 1 punto = ₡5 de descuento al pagar</p>
+            <p class="text-[10px] text-slate-500 mt-1">Ej: 1 significa que 1 punto = ₡1 de descuento al pagar</p>
           </div>
 
           <!-- puntosMinimosCanje -->
@@ -935,11 +935,11 @@
               Mínimo de puntos para poder canjear:
             </label>
             <div class="flex items-center gap-2">
-              <input type="number" id="puntosMinimosCajeInput" min="1" step="10" placeholder="100"
+              <input type="number" id="puntosMinimosCajeInput" min="1" step="100" placeholder="4000"
                 class="flex-1 px-3 py-2 bg-slate-900 border border-amber-500/40 rounded-xl text-white font-mono font-bold focus:outline-none focus:border-amber-400">
               <span class="text-slate-400 font-mono shrink-0">puntos</span>
             </div>
-            <p class="text-[10px] text-slate-500 mt-1">Ej: 100 = el cliente necesita tener al menos 100 puntos para canjear</p>
+            <p class="text-[10px] text-slate-500 mt-1">Ej: 4000 = el cliente necesita tener al menos 4000 puntos para canjear</p>
           </div>
 
           <!-- Resumen visual -->
@@ -1520,6 +1520,6 @@
   </nav>
 
   <!-- Application Logic -->
-  <script src="app.js?v=20260830_07"></script>
+  <script src="app.js?v=20260830_11"></script>
 </body>
 </html>

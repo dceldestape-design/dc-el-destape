@@ -123,10 +123,10 @@ let state = {
     tipoCambio: 520,
     nombreNegocio: "DC El Destape",
     telefonoNegocio: "+506 8992-7936",
-    // Configuración del sistema de puntos de fidelización
-    puntosRazonCRC: 100,      // cada ₡100 = 1 punto
-    puntosValorCRC: 5,        // 1 punto = ₡1 de descuento
-    puntosMinimosCanje: 4000   // mínimo para canjear
+    // Configuración del sistema de puntos de fidelización (Predefinidos)
+    puntosRazonCRC: 20,        // cada ₡20 = 1 punto
+    puntosValorCRC: 1,         // 1 punto = ₡1 de descuento
+    puntosMinimosCanje: 4000   // mínimo 4000 puntos para poder canjear
   },
   vendedorActual: "Carlos", // "Carlos" | "Daniel"
   vistaVendedor: "Carlos",   // "Carlos" | "Daniel" | "Consolidado"
@@ -811,6 +811,9 @@ function marcarPedidoComprado(idPedido) {
   guardarPedidosLocal();
   renderizarDashboard();
   mostrarToast(`Pedido de ${ped.cliente || 'cliente'} marcado como comprado ✅`, "success");
+
+  // Encolar y sincronizar con Google Sheets
+  encolarAccionSincronizacion("marcarPedidoComprado", { id: idPedido });
 }
 
 function cancelarPedido(idPedido) {
@@ -819,6 +822,9 @@ function cancelarPedido(idPedido) {
   guardarPedidosLocal();
   renderizarDashboard();
   mostrarToast("Pedido eliminado", "info");
+
+  // Encolar y sincronizar con Google Sheets
+  encolarAccionSincronizacion("eliminarPedido", { id: idPedido });
 }
 
 // ==========================================================================
@@ -1302,17 +1308,13 @@ function cerrarDropdownCliente(e) {
   }
 }
 
-// --- Modal cliente (crear/editar) ---
-let _editandoClienteId = null;
-
-function abrirModalNuevoCliente() {
+function abrirModalNuevoCliente(prefillNombre = "") {
   _editandoClienteId = null;
   const dd = document.getElementById("clienteDropdown");
   if (dd) dd.classList.add("hidden");
 
-  // Pre-llenar nombre desde lo que escribió el usuario
-  const q = (document.getElementById("posClienteInput") || {}).value || "";
-  document.getElementById("modalClienteNombre").value = q;
+  // Solo pre-llenar si se pasa explícitamente como argumento, de lo contrario siempre en blanco
+  document.getElementById("modalClienteNombre").value = typeof prefillNombre === "string" ? prefillNombre : "";
   document.getElementById("modalClienteTelefono").value = "";
   document.getElementById("modalClientePuntos").value = "0";
   document.getElementById("modalClienteId").textContent = "Nuevo cliente";
@@ -1320,6 +1322,11 @@ function abrirModalNuevoCliente() {
 
   const modal = document.getElementById("modalCliente");
   if (modal) { modal.classList.remove("hidden"); modal.classList.add("flex"); }
+  
+  setTimeout(() => {
+    document.getElementById("modalClienteNombre")?.focus();
+  }, 100);
+
   inicializarIconos();
 }
 
@@ -1340,9 +1347,13 @@ function abrirModalEditarCliente(id) {
 }
 
 function guardarClienteForm() {
-  const nombre = document.getElementById("modalClienteNombre").value.trim();
-  const telefono = document.getElementById("modalClienteTelefono").value.trim();
-  const puntos = parseInt(document.getElementById("modalClientePuntos").value) || 0;
+  const nombreInput = document.getElementById("modalClienteNombre");
+  const telInput = document.getElementById("modalClienteTelefono");
+  const puntosInput = document.getElementById("modalClientePuntos");
+
+  const nombre = (nombreInput?.value || "").trim();
+  const telefono = (telInput?.value || "").trim();
+  const puntos = parseInt(puntosInput?.value) || 0;
 
   if (!nombre || !telefono) { mostrarToast("Nombre y teléfono son requeridos.", "error"); return; }
 
@@ -1360,25 +1371,37 @@ function guardarClienteForm() {
   }
 }
 
+function cerrarModalCliente() {
+  _editandoClienteId = null;
+  const nombreInput = document.getElementById("modalClienteNombre");
+  const telInput = document.getElementById("modalClienteTelefono");
+  const puntosInput = document.getElementById("modalClientePuntos");
+  if (nombreInput) nombreInput.value = "";
+  if (telInput) telInput.value = "";
+  if (puntosInput) puntosInput.value = "0";
+
+  const modal = document.getElementById("modalCliente");
+  if (modal) {
+    modal.classList.add("hidden");
+    modal.classList.remove("flex");
+  }
+}
+
 function eliminarClienteActual() {
   if (!_editandoClienteId) return;
   const cli = state.clientes[_editandoClienteId];
   if (!cli) return;
   if (!confirm(`¿Eliminar a ${cli.nombre}? Esta acción no se puede deshacer.`)) return;
 
-  delete state.clientes[_editandoClienteId];
+  const idAEliminar = _editandoClienteId;
+  delete state.clientes[idAEliminar];
   guardarClientesLocal();
   cerrarModalCliente();
-  if (state.clienteSeleccionado && state.clienteSeleccionado.id === _editandoClienteId) {
+  if (state.clienteSeleccionado && state.clienteSeleccionado.id === idAEliminar) {
     deseleccionarCliente();
   }
   renderizarClientes();
   mostrarToast("Cliente eliminado.", "info");
-}
-
-function cerrarModalCliente() {
-  const modal = document.getElementById("modalCliente");
-  if (modal) { modal.classList.add("hidden"); modal.classList.remove("flex"); }
 }
 
 // --- Vista Maestro de Clientes ---
@@ -2701,6 +2724,9 @@ function guardarPedidoCliente() {
 
   mostrarToast(`📋 Pedido ${idPedido} guardado con éxito. Se agregó al consolidado del proveedor.`, "success");
   abrirModalRecibo(pedidoObj, true);
+
+  // Encolar y sincronizar con Google Sheets
+  encolarAccionSincronizacion("registrarPedido", { pedido: pedidoObj });
 }
 
 // ==========================================================================
@@ -3844,6 +3870,18 @@ async function sincronizarConSheets(mostrarMensaje = true) {
         state.movimientosDinero = json.data.finanzas;
         guardarFinanzasLocal();
       }
+      if (json.data.clientes && json.data.clientes.length > 0) {
+        const mapaCli = {};
+        json.data.clientes.forEach(c => {
+          if (c.id) mapaCli[c.id] = c;
+        });
+        state.clientes = mapaCli;
+        guardarClientesLocal();
+      }
+      if (json.data.pedidos) {
+        state.pedidos = json.data.pedidos;
+        guardarPedidosLocal();
+      }
 
       renderizarTodo();
       actualizarBadgeConexion();
@@ -3934,9 +3972,9 @@ function cargarConfigPuntosUI() {
   const razonEl = document.getElementById("puntosRazonCRCInput");
   const valorEl = document.getElementById("puntosValorCRCInput");
   const minimoEl = document.getElementById("puntosMinimosCajeInput");
-  if (razonEl) razonEl.value = c.puntosRazonCRC || 100;
-  if (valorEl) valorEl.value = c.puntosValorCRC || 5;
-  if (minimoEl) minimoEl.value = c.puntosMinimosCanje || 100;
+  if (razonEl) razonEl.value = c.puntosRazonCRC || 20;
+  if (valorEl) valorEl.value = c.puntosValorCRC !== undefined ? c.puntosValorCRC : 1;
+  if (minimoEl) minimoEl.value = c.puntosMinimosCanje || 4000;
 }
 
 function recargarCatalogoSemilla() {
