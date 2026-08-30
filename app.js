@@ -3870,15 +3870,21 @@ async function sincronizarConSheets(mostrarMensaje = true) {
         state.movimientosDinero = json.data.finanzas;
         guardarFinanzasLocal();
       }
-      if (json.data.clientes && json.data.clientes.length > 0) {
+      if (json.data.clientes) {
         const mapaCli = {};
-        json.data.clientes.forEach(c => {
-          if (c.id) mapaCli[c.id] = c;
-        });
-        state.clientes = mapaCli;
-        guardarClientesLocal();
+        if (Array.isArray(json.data.clientes)) {
+          json.data.clientes.forEach(c => {
+            if (c.id) mapaCli[c.id] = c;
+          });
+        } else if (typeof json.data.clientes === "object") {
+          Object.assign(mapaCli, json.data.clientes);
+        }
+        if (Object.keys(mapaCli).length > 0) {
+          state.clientes = mapaCli;
+          guardarClientesLocal();
+        }
       }
-      if (json.data.pedidos) {
+      if (json.data.pedidos && Array.isArray(json.data.pedidos)) {
         state.pedidos = json.data.pedidos;
         guardarPedidosLocal();
       }
