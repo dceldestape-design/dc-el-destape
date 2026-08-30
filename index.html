@@ -147,7 +147,7 @@
         </div>
       </div>
 
-      <!-- Metrics Overview Cards (Dual USD & CRC) -->
+      <!-- Metrics Overview Cards (CRC Principal, USD Referencia) -->
       <div class="grid grid-cols-2 gap-3">
         
         <!-- Metric 1: Valor a Costo -->
@@ -156,8 +156,8 @@
             <span class="text-[10px] font-bold uppercase tracking-wider">Valor a Costo</span>
             <i data-lucide="calculator" class="w-3.5 h-3.5 text-slate-400"></i>
           </div>
-          <div class="text-base font-black text-white font-mono" id="dashCostoUSD">$0.00</div>
-          <div class="text-xs text-slate-400 font-mono" id="dashCostoCRC">₡0</div>
+          <div class="text-base font-black text-white font-mono" id="dashCostoCRC">₡0</div>
+          <div class="text-xs text-slate-500 font-mono" id="dashCostoUSD">$0.00</div>
         </div>
 
         <!-- Metric 2: Valor a Precio Venta -->
@@ -166,8 +166,8 @@
             <span class="text-[10px] font-bold uppercase tracking-wider">Valor a Venta</span>
             <i data-lucide="trending-up" class="w-3.5 h-3.5"></i>
           </div>
-          <div class="text-base font-black text-teal-300 font-mono" id="dashVentaUSD">$0.00</div>
-          <div class="text-xs text-slate-400 font-mono" id="dashVentaCRC">₡0</div>
+          <div class="text-base font-black text-teal-300 font-mono" id="dashVentaCRC">₡0</div>
+          <div class="text-xs text-slate-500 font-mono" id="dashVentaUSD">$0.00</div>
         </div>
 
         <!-- Metric 3: Margen Potencial -->
@@ -176,8 +176,8 @@
             <span class="text-[10px] font-bold uppercase tracking-wider">Margen Potencial</span>
             <i data-lucide="badge-percent" class="w-3.5 h-3.5"></i>
           </div>
-          <div class="text-base font-black text-amber-300 font-mono" id="dashMargenUSD">$0.00</div>
-          <div class="text-xs text-slate-400 font-mono" id="dashMargenCRC">₡0</div>
+          <div class="text-base font-black text-amber-300 font-mono" id="dashMargenCRC">₡0</div>
+          <div class="text-xs text-slate-500 font-mono" id="dashMargenUSD">$0.00</div>
         </div>
 
         <!-- Metric 4: Existencias y Unidades -->
@@ -187,7 +187,7 @@
             <i data-lucide="boxes" class="w-3.5 h-3.5"></i>
           </div>
           <div class="text-base font-black text-white font-mono"><span id="dashTotalUnidades">0</span> <span class="text-xs font-normal text-slate-400">unids</span></div>
-          <div class="text-xs text-slate-400 font-mono"><span id="dashProdsConStock">0</span> con stock</div>
+          <div class="text-xs text-slate-500 font-mono"><span id="dashProdsConStock">0</span> con stock</div>
         </div>
       </div>
 
@@ -1520,6 +1520,6 @@
   </nav>
 
   <!-- Application Logic -->
-  <script src="app.js?v=20260830_05"></script>
+  <script src="app.js?v=20260830_06"></script>
 </body>
 </html>
