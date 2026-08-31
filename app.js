@@ -1532,12 +1532,12 @@ function renderizarCuentas() {
 
   if (lista.length === 0) {
     cont.innerHTML = `
-      <div class="flex flex-col items-center justify-center py-10 text-slate-500 text-xs space-y-2 bg-slate-900/60 rounded-2xl border border-slate-800">
+      <div class="flex flex-col items-center justify-center py-12 text-slate-500 text-xs space-y-2 bg-slate-900/60 rounded-2xl border border-slate-800">
         <i data-lucide="badge-check" class="w-10 h-10 stroke-1 text-slate-600"></i>
         <span>${q ? "No hay cuentas que coincidan con la búsqueda." : "No hay cuentas registradas en esta sección."}</span>
-        <button onclick="abrirModalNuevaCuenta()" class="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-bold text-xs active:scale-95 mt-2">
-          ➕ Registrar cuenta pendiente
-        </button>
+        <span class="text-[11px] text-slate-500 max-w-xs text-center mt-1">
+          Las cuentas por cobrar se generan automáticamente al vender con <b>'Pago Luego'</b> seleccionando un cliente registrado.
+        </span>
       </div>
     `;
     inicializarIconos();
@@ -2745,6 +2745,12 @@ function pasarVentaIndividualACuentasPorCobrar(idxVenta) {
   const totCRC = Number(v.totalCRC || 0);
   const totUSD = Number(v.totalUSD || 0);
   const cliNombre = v.cliente || "Cliente General";
+  
+  if (!cliNombre || cliNombre.toLowerCase() === "cliente general") {
+    mostrarToast("⚠️ No se puede pasar a CXC: la venta no tiene cliente específico asignado.", "error");
+    return;
+  }
+
   const nombreProd = v.nombre || (v.codigo ? `Licor (${v.codigo})` : "Venta");
   const cantProd = Number(v.cantidad || 1);
   
@@ -3255,9 +3261,24 @@ async function completarVenta() {
 
   // --- Nombre/ID de cliente ---
   const cli = state.clienteSeleccionado;
-  const clienteNombre = cli ? cli.nombre : (document.getElementById("posClienteInput")?.value?.trim() || "Cliente General");
+  const clienteInputVal = document.getElementById("posClienteInput")?.value?.trim();
+  const clienteNombre = cli ? cli.nombre : (clienteInputVal || "Cliente General");
   const clienteId = cli ? cli.id : null;
   const clienteTelefono = cli ? cli.telefono : null;
+
+  // Validación estricta: No se puede vender con 'Pago Luego' si no hay un cliente seleccionado/asignado
+  if (state.metodoPagoSeleccionado === "Pago Luego") {
+    if (!clienteNombre || clienteNombre.toLowerCase() === "cliente general") {
+      mostrarToast("⚠️ Para vender con 'Pago Luego' debes asignar un cliente registrado.", "error");
+      const inCli = document.getElementById("posClienteInput");
+      if (inCli) {
+        inCli.focus();
+        inCli.classList.add("border-amber-500", "animate-pulse");
+        setTimeout(() => inCli.classList.remove("border-amber-500", "animate-pulse"), 2500);
+      }
+      return;
+    }
+  }
 
   const idVenta = "VTA-" + Date.now().toString().slice(-6);
 
@@ -4786,9 +4807,45 @@ async function recargarCatalogoSemilla() {
   }
 }
 
+async function forzarActualizacionApp() {
+  if (!confirm("¿Deseas vaciar el caché del navegador y forzar la descarga de la versión más reciente?")) return;
+
+  mostrarToast("Vaciando caché y buscando última versión... ⏳", "info");
+
+  try {
+    // 1. Limpiar todos los cachés de CacheStorage (Service Worker)
+    if ('caches' in window) {
+      const cacheKeys = await caches.keys();
+      await Promise.all(cacheKeys.map(key => caches.delete(key)));
+    }
+
+    // 2. Desregistrar Service Workers activos para obligar instalación limpia
+    if ('serviceWorker' in navigator) {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      for (const reg of registrations) {
+        await reg.unregister();
+      }
+    }
+
+    mostrarToast("¡Caché eliminado! Recargando aplicación... 🚀", "success");
+
+    // 3. Forzar recarga con bypass de caché
+    setTimeout(() => {
+      window.location.href = window.location.origin + window.location.pathname + '?v=' + Date.now();
+    }, 800);
+  } catch (err) {
+    console.error("Error al limpiar caché:", err);
+    window.location.reload(true);
+  }
+}
+
 function limpiarCacheLocal() {
-  if (confirm("¿Borrar todos los datos locales y reiniciar la aplicación?")) {
+  if (confirm("¿Borrar todos los datos locales de prueba y reiniciar la aplicación?")) {
+    const sheetsUrl = state.config.sheetsUrl;
     localStorage.clear();
+    if (sheetsUrl) {
+      localStorage.setItem("inv_config_v2", JSON.stringify({ sheetsUrl }));
+    }
     location.reload();
   }
 }

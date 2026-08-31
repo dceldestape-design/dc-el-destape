@@ -1103,9 +1103,22 @@
       </div>
 
       <!-- Reset & Reload Demo -->
-      <div class="bg-slate-800/40 border border-slate-800 rounded-2xl p-4 space-y-2 text-xs">
-        <h4 class="font-bold text-slate-400">Mantenimiento y Datos</h4>
-        <div class="flex gap-2">
+      <div class="bg-slate-800/40 border border-slate-800 rounded-2xl p-4 space-y-3 text-xs">
+        <div class="flex items-center justify-between">
+          <h4 class="font-bold text-slate-300">Mantenimiento y Actualizaciones</h4>
+          <span class="text-[10px] text-slate-500 font-mono">PWA Offline</span>
+        </div>
+
+        <!-- Botón Especial: Vaciar Caché y Actualizar App -->
+        <button onclick="forzarActualizacionApp()" class="w-full py-2.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold rounded-xl shadow-lg shadow-cyan-600/25 active:scale-95 transition-all flex items-center justify-center gap-2">
+          <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+          <span>Vaciar Caché y Forzar Actualización</span>
+        </button>
+        <p class="text-[10px] text-slate-400 leading-tight">
+          💡 Úsalo en el celular si no ves los últimos cambios o botones nuevos. Elimina archivos guardados en caché y recarga la versión más reciente.
+        </p>
+
+        <div class="flex gap-2 pt-1 border-t border-slate-800/80">
           <button onclick="recargarCatalogoSemilla()" class="flex-1 py-2.5 bg-slate-800 text-indigo-300 hover:text-white rounded-xl border border-indigo-500/40 font-semibold flex items-center justify-center gap-1.5 active:scale-95 transition-all">
             <i data-lucide="cloud-download" class="w-4 h-4 text-indigo-400"></i>
             <span>Descargar de Sheets</span>
@@ -1839,6 +1852,6 @@
   </nav>
 
   <!-- Application Logic -->
-  <script src="app.js?v=20260831_01"></script>
+  <script src="app.js?v=20260831_03"></script>
 </body>
 </html>
