@@ -554,6 +554,25 @@ function renderizarDashboard() {
   document.getElementById("dashTotalUnidades").textContent = fmtNum(totalUnidades);
   document.getElementById("dashProdsConStock").textContent = `${prodsConStock} de ${Object.keys(state.productos).length}`;
 
+  // --- Resumen de Cuentas Pendientes en Dashboard (Por Cobrar y Por Pagar) ---
+  let totCobrarCRC = 0;
+  let totPagarCRC = 0;
+  (state.cuentas || []).forEach(cta => {
+    const saldo = Number(cta.saldoPendienteCRC || 0);
+    if ((cta.estado || "Pendiente") !== "Pagado" && saldo > 0) {
+      if (cta.tipo === "Por Cobrar") {
+        totCobrarCRC += saldo;
+      } else {
+        totPagarCRC += saldo;
+      }
+    }
+  });
+
+  const dashCobrarEl = document.getElementById("dashCobrarCRC");
+  const dashPagarEl = document.getElementById("dashPagarCRC");
+  if (dashCobrarEl) dashCobrarEl.textContent = fmtCRC(totCobrarCRC);
+  if (dashPagarEl) dashPagarEl.textContent = fmtCRC(totPagarCRC);
+
   // --- Pedidos Pendientes de Clientes (Consolidado para Proveedor) ---
   renderizarConsolidadoPedidosDashboard();
 
@@ -4519,7 +4538,12 @@ async function _descargarDatosSheets(mostrarMensaje = false) {
         console.log("[SYNC] Pedidos cargados:", state.pedidos.length, "| Locales pendientes cola:", pedidosSoloLocales.length);
       }
       if (json.data.cuentas && Array.isArray(json.data.cuentas)) {
-        state.cuentas = json.data.cuentas;
+        const idsCuentasSheets = new Set(json.data.cuentas.map(c => c.id || c.referenciaId));
+        const cuentasSoloLocales = (state.cuentas || []).filter(c =>
+          !idsCuentasSheets.has(c.id) && !idsCuentasSheets.has(c.referenciaId) &&
+          (state.colaSincronizacion || []).some(q => q.datos && q.datos.cuenta && (q.datos.cuenta.id === c.id || q.datos.cuenta.referenciaId === c.referenciaId))
+        );
+        state.cuentas = [...json.data.cuentas, ...cuentasSoloLocales];
         guardarCuentasLocal();
       }
 
