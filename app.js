@@ -132,14 +132,8 @@ function inicializarIconos() {
 // GESTIÓN DE VENDEDORES (CARLOS Y DANIEL)
 // ==========================================================================
 function comprobarLoginVendedor() {
-  const saved = localStorage.getItem("inv_vendedor_actual");
-  if (!saved) {
-    abrirModalSeleccionVendedor(true);
-  } else {
-    state.vendedorActual = saved;
-    state.vistaVendedor = localStorage.getItem("inv_vista_vendedor") || saved;
-    actualizarUIVendedor();
-  }
+  // Siempre solicitar selección obligatoria de vendedor al ingresar a la app
+  abrirModalSeleccionVendedor(true);
 }
 
 function abrirModalSeleccionVendedor(forzado = false) {
@@ -170,14 +164,13 @@ function seleccionarVendedorLogin(vendedor) {
   } else {
     state.vendedorActual = vendedor;
     state.vistaVendedor = vendedor;
-    localStorage.setItem("inv_vendedor_actual", vendedor);
   }
   localStorage.setItem("inv_vista_vendedor", state.vistaVendedor);
 
   actualizarUIVendedor();
   cerrarModalLoginVendedor();
   renderizarTodo();
-  mostrarToast(`Perfil activo: ${vendedor === "Consolidado" ? "Consolidado (Total)" : vendedor} 👤`, "success");
+  mostrarToast(`¡Bienvenido! Perfil activo: ${vendedor === "Consolidado" ? "Consolidado (Total)" : vendedor} 👤`, "success");
 }
 
 function cambiarVistaVendedor(vista) {
