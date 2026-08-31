@@ -2127,25 +2127,32 @@ function limpiarImagenModal() {
 // ==========================================================================
 // MODAL DE PRODUCTO (DUAL CURRENCY & FOTO)
 // ==========================================================================
-function abrirModalProducto(producto = null) {
+function abrirModalProducto(productoOcodigo = null) {
   const modal = document.getElementById("modalProducto");
   const titulo = document.getElementById("modalProductoTitulo");
   const btnEliminar = document.getElementById("btnEliminarProducto");
 
+  let producto = null;
+  if (typeof productoOcodigo === "string") {
+    producto = state.productos[productoOcodigo] || null;
+  } else if (productoOcodigo && typeof productoOcodigo === "object") {
+    producto = productoOcodigo;
+  }
+
   if (producto) {
     titulo.innerHTML = `<i data-lucide="edit" class="w-5 h-5 text-amber-400"></i> Editar Licor (${producto.codigo})`;
-    document.getElementById("prodCodigo").value = producto.codigo;
+    document.getElementById("prodCodigo").value = producto.codigo || "";
     document.getElementById("prodCodigo").disabled = true;
     document.getElementById("prodNombre").value = producto.nombre || "";
     document.getElementById("prodCategoria").value = producto.categoria || "";
     document.getElementById("prodImagenUrl").value = producto.imagenUrl || "";
-    document.getElementById("prodPrecioVentaUSD").value = producto.precioVentaUSD || 0;
-    document.getElementById("prodPrecioVentaCRC").value = producto.precioVentaCRC || 0;
-    document.getElementById("prodCostoRefUSD").value = producto.costoRefUSD || 0;
-    document.getElementById("prodCostoRefCRC").value = producto.costoRefCRC || 0;
-    document.getElementById("prodStock").value = producto.stockInicial || 0;
-    document.getElementById("prodStockMinimo").value = producto.stockMinimo || 2;
-    btnEliminar.classList.remove("hidden");
+    document.getElementById("prodPrecioVentaUSD").value = Number(producto.precioVentaUSD || 0);
+    document.getElementById("prodPrecioVentaCRC").value = Number(producto.precioVentaCRC || 0);
+    document.getElementById("prodCostoRefUSD").value = Number(producto.costoRefUSD || 0);
+    document.getElementById("prodCostoRefCRC").value = Number(producto.costoRefCRC || 0);
+    document.getElementById("prodStock").value = Number(producto.stockInicial || 0);
+    document.getElementById("prodStockMinimo").value = Number(producto.stockMinimo || 2);
+    if (btnEliminar) btnEliminar.classList.remove("hidden");
   } else {
     titulo.innerHTML = `<i data-lucide="wine" class="w-5 h-5 text-amber-400"></i> Nuevo Licor`;
     document.getElementById("formProducto").reset();
@@ -2153,7 +2160,7 @@ function abrirModalProducto(producto = null) {
     document.getElementById("prodCodigo").value = "LIC-" + Math.floor(100 + Math.random() * 900);
     document.getElementById("prodImagenUrl").value = "";
     document.getElementById("prodStockMinimo").value = 2;
-    btnEliminar.classList.add("hidden");
+    if (btnEliminar) btnEliminar.classList.add("hidden");
   }
 
   actualizarPreviewImagenModal();
