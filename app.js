@@ -588,9 +588,9 @@ function renderizarDashboard() {
       const vendColor = vend === "Daniel" ? "text-violet-400 bg-violet-950/60 border-violet-500/30" : "text-blue-400 bg-blue-950/60 border-blue-500/30";
       const totCRC = Number(v.totalCRC || 0);
       const totUSD = Number(v.totalUSD || 0);
-      
       const esPagoLuego = (v.metodoPago || "").toLowerCase().includes("luego") || (v.metodoPago || "").toLowerCase().includes("crédito");
       const metodoColor = esPagoLuego ? "text-amber-300 bg-amber-950/60 border-amber-500/40" : "text-slate-400 bg-slate-900 border-slate-800";
+      const vUid = v.id ? `${v.id}_${v.codigo || ''}_${idx}` : `VTA_ROW_${idx}`;
 
       // Verificar si ESTA venta exacta ya está en Cuentas por Cobrar
       const yaEnCuentas = esPagoLuego || (state.cuentas || []).some(cta => 
