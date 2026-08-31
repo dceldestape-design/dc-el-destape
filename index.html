@@ -716,16 +716,10 @@
     <section id="viewCuentas" class="space-y-3.5 hidden">
 
       <!-- Header & Buscador -->
-      <div class="flex items-center gap-2">
-        <div class="relative flex-1">
-          <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
-          <input type="text" id="searchCuentas" oninput="state.filtroCuentas=this.value; renderizarCuentas()" placeholder="Buscar cliente, proveedor o factura..."
-            class="w-full pl-10 pr-4 py-2.5 bg-slate-800 border border-slate-700 rounded-2xl text-sm text-white placeholder-slate-400 focus:outline-none focus:border-indigo-500">
-        </div>
-        <button onclick="abrirModalNuevaCuenta()" class="px-3 py-2.5 bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white rounded-2xl font-bold text-xs flex items-center gap-1.5 active:scale-95 transition-all shadow-md">
-          <i data-lucide="plus-circle" class="w-4 h-4"></i>
-          <span>Nueva</span>
-        </button>
+      <div class="relative">
+        <i data-lucide="search" class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"></i>
+        <input type="text" id="searchCuentas" oninput="state.filtroCuentas=this.value; renderizarCuentas()" placeholder="Buscar cliente, proveedor o factura..."
+          class="w-full pl-10 pr-4 py-2.5 bg-slate-800 border border-slate-700 rounded-2xl text-sm text-white placeholder-slate-400 focus:outline-none focus:border-indigo-500">
       </div>
 
       <!-- Resumen General de Cuentas (Por Cobrar vs Por Pagar) -->
@@ -1845,6 +1839,6 @@
   </nav>
 
   <!-- Application Logic -->
-  <script src="app.js?v=20260830_26"></script>
+  <script src="app.js?v=20260830_28"></script>
 </body>
 </html>

@@ -589,11 +589,10 @@ function renderizarDashboard() {
       const totCRC = Number(v.totalCRC || 0);
       const totUSD = Number(v.totalUSD || 0);
       const esPagoLuego = (v.metodoPago || "").toLowerCase().includes("luego") || (v.metodoPago || "").toLowerCase().includes("crédito");
-      const metodoColor = esPagoLuego ? "text-amber-300 bg-amber-950/60 border-amber-500/40" : "text-slate-400 bg-slate-900 border-slate-800";
       const vUid = v.id ? `${v.id}_${v.codigo || ''}_${idx}` : `VTA_ROW_${idx}`;
 
-      // Verificar si ESTA venta exacta ya está en Cuentas por Cobrar
-      const yaEnCuentas = esPagoLuego || (state.cuentas || []).some(cta => 
+      // Buscar si existe una cuenta asociada a esta venta
+      const cuentaAsociada = (state.cuentas || []).find(cta => 
         cta.tipo === "Por Cobrar" && (
           cta.referenciaId === v.id ||
           cta.referenciaId === vUid ||
@@ -602,13 +601,28 @@ function renderizarDashboard() {
         )
       );
 
+      // Determinar estado real de la cuenta
+      let estadoBadgeHtml = '';
+      if (cuentaAsociada) {
+        const est = cuentaAsociada.estado || "Pendiente";
+        if (est === "Pagado") {
+          estadoBadgeHtml = `<span class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-950/80 border border-emerald-500/40 text-emerald-300">✅ Liquidada</span>`;
+        } else if (est === "Parcial") {
+          estadoBadgeHtml = `<span class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-950/80 border border-amber-500/40 text-amber-300">⏳ Abono Parcial</span>`;
+        } else {
+          estadoBadgeHtml = `<span class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-rose-950/80 border border-rose-500/40 text-rose-300">🕒 Por Cobrar</span>`;
+        }
+      } else if (esPagoLuego) {
+        estadoBadgeHtml = `<span class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-950/60 border border-amber-500/40 text-amber-300">🕒 Pago Luego</span>`;
+      }
+
       return `
         <div class="py-2.5 flex items-center justify-between border-b border-slate-800/60 last:border-0 gap-2">
           <div class="min-w-0 flex-1">
             <div class="flex items-center gap-1.5 mb-0.5 flex-wrap">
               <span class="text-[9px] font-bold px-1.5 py-0.2 rounded border ${vendColor}">👤 ${vend}</span>
               <span class="text-xs font-bold text-white truncate max-w-[150px]">${v.cliente || "Venta General"}</span>
-              ${esPagoLuego ? `<span class="text-[9px] font-bold px-1.5 py-0.2 rounded border ${metodoColor}">🕒 Pago Luego</span>` : ''}
+              ${estadoBadgeHtml}
             </div>
             <div class="text-[11px] text-slate-400 font-mono">
               ${fecha} • ${v.nombre ? `${v.nombre} (${v.cantidad || 1}x)` : `${v.items ? v.items.length : 1} prod(s)`} <span class="text-[10px] text-slate-500">(${v.metodoPago || "Efectivo"})</span>
@@ -618,13 +632,17 @@ function renderizarDashboard() {
             <div class="text-xs font-black text-emerald-400">${fmtCRC(totCRC)}</div>
             <div class="text-[10px] text-slate-400">${fmtUSD(totUSD)}</div>
             <div class="pt-0.5">
-              ${!yaEnCuentas ? `
+              ${!cuentaAsociada && !esPagoLuego ? `
                 <button onclick="pasarVentaIndividualACuentasPorCobrar(${idx})" title="Pasar a Cuentas por Cobrar" class="text-[9.5px] font-bold px-2 py-0.5 rounded bg-amber-950/60 hover:bg-amber-900 border border-amber-500/40 text-amber-300 active:scale-95 transition-all">
                   + Cta Cobrar
                 </button>
+              ` : (cuentaAsociada && cuentaAsociada.estado === "Pagado" ? `
+                <span class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-950/60 border border-emerald-500/30 text-emerald-300">Cobrado</span>
               ` : `
-                <span class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-indigo-950/60 border border-indigo-500/30 text-indigo-300">En Cuentas</span>
-              `}
+                <button onclick="cambiarVista('cuentas')" title="Ver en Cuentas por Cobrar" class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-indigo-950/60 hover:bg-indigo-900 border border-indigo-500/40 text-indigo-300 active:scale-95 transition-all">
+                  Ver Cuenta
+                </button>
+              `)}
             </div>
           </div>
         </div>
