@@ -589,13 +589,17 @@ function renderizarDashboard() {
       const totCRC = Number(v.totalCRC || 0);
       const totUSD = Number(v.totalUSD || 0);
       
-      // Identificador único para esta fila específica de venta
-      const vUid = v.id ? `${v.id}_${v.codigo || ''}_${idx}` : `VTA_ROW_${idx}`;
-      
-      // Verificar si ESTA venta exacta ya fue pasada a cuentas
-      const yaEnCuentas = (state.cuentas || []).some(cta => 
-        cta.referenciaId === vUid || 
-        (cta.referenciaId === v.id && (!cta.notas || cta.notas.includes(v.codigo || '')))
+      const esPagoLuego = (v.metodoPago || "").toLowerCase().includes("luego") || (v.metodoPago || "").toLowerCase().includes("crédito");
+      const metodoColor = esPagoLuego ? "text-amber-300 bg-amber-950/60 border-amber-500/40" : "text-slate-400 bg-slate-900 border-slate-800";
+
+      // Verificar si ESTA venta exacta ya está en Cuentas por Cobrar
+      const yaEnCuentas = esPagoLuego || (state.cuentas || []).some(cta => 
+        cta.tipo === "Por Cobrar" && (
+          cta.referenciaId === v.id ||
+          cta.referenciaId === vUid ||
+          (v.id && cta.referenciaId && cta.referenciaId.startsWith(v.id)) ||
+          (cta.entidad && v.cliente && cta.entidad.toLowerCase() === v.cliente.toLowerCase() && Math.abs(Number(cta.montoTotalCRC) - totCRC) < 1)
+        )
       );
 
       return `
@@ -604,6 +608,7 @@ function renderizarDashboard() {
             <div class="flex items-center gap-1.5 mb-0.5 flex-wrap">
               <span class="text-[9px] font-bold px-1.5 py-0.2 rounded border ${vendColor}">👤 ${vend}</span>
               <span class="text-xs font-bold text-white truncate max-w-[150px]">${v.cliente || "Venta General"}</span>
+              ${esPagoLuego ? `<span class="text-[9px] font-bold px-1.5 py-0.2 rounded border ${metodoColor}">🕒 Pago Luego</span>` : ''}
             </div>
             <div class="text-[11px] text-slate-400 font-mono">
               ${fecha} • ${v.nombre ? `${v.nombre} (${v.cantidad || 1}x)` : `${v.items ? v.items.length : 1} prod(s)`} <span class="text-[10px] text-slate-500">(${v.metodoPago || "Efectivo"})</span>
