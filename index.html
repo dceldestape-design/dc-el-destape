@@ -812,13 +812,31 @@
 
           <div class="grid grid-cols-2 gap-2 pt-2 border-t border-slate-800/80 relative z-10 font-mono">
             <div>
-              <div class="text-[10px] text-slate-400 uppercase font-sans font-bold">Saldo en Colones</div>
+              <div class="text-[10px] text-slate-400 uppercase font-sans font-bold">Saldo en Colones (Caja Real)</div>
               <div class="text-lg font-black text-emerald-400" id="finSaldoEmpresaCRC">₡0</div>
             </div>
             <div class="text-right">
               <div class="text-[10px] text-slate-400 uppercase font-sans font-bold">Saldo en Dólares</div>
               <div class="text-base font-black text-white" id="finSaldoEmpresaUSD">$0.00 USD</div>
             </div>
+          </div>
+
+          <!-- Rubro Extra: Cuentas por Cobrar Pendientes (Dinero que falta por ingresar) -->
+          <div class="mt-2.5 pt-2 border-t border-slate-800/80 bg-slate-950/60 rounded-2xl p-2.5 border border-amber-500/30 relative z-10 font-mono text-xs">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-1.5 font-sans">
+                <i data-lucide="clock" class="w-3.5 h-3.5 text-amber-400"></i>
+                <span class="text-[11px] font-bold text-amber-300">Por Cobrar Pendiente (CXC):</span>
+              </div>
+              <span id="finCxcBadge" class="hidden text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-950/80 border border-amber-500/40 text-amber-300 font-sans animate-pulse">Pendiente de Ingreso</span>
+            </div>
+            <div class="flex items-baseline justify-between mt-1">
+              <div class="text-sm font-black text-amber-400" id="finCxcPendienteCRC">₡0</div>
+              <div class="text-[10px] text-slate-400" id="finCxcPendienteUSD">($0.00 USD)</div>
+            </div>
+            <p class="text-[9.5px] text-slate-400 font-sans mt-1 leading-tight">
+              ⏳ Este dinero <b>no suma</b> al saldo en caja hasta que el cliente abone, liquide o se elimine la cuenta.
+            </p>
           </div>
         </div>
 
@@ -1827,6 +1845,6 @@
   </nav>
 
   <!-- Application Logic -->
-  <script src="app.js?v=20260830_24"></script>
+  <script src="app.js?v=20260830_25"></script>
 </body>
 </html>

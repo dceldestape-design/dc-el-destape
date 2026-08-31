@@ -1727,9 +1727,11 @@ function guardarAbonoCuenta() {
 
   cerrarModalAbonoCuenta();
   renderizarCuentas();
+  renderizarFinanzas();
+  renderizarDashboard();
 
   if (nuevoEstado === "Pagado") {
-    mostrarToast(`¡Cuenta de ${cta.entidad} liquidada completamente! 🎉`, "success");
+    mostrarToast(`¡Cuenta de ${cta.entidad} liquidada completamente! Dinero ingresado a Caja 💵`, "success");
     if (window.confetti) window.confetti({ particleCount: 70, spread: 60, origin: { y: 0.8 } });
   } else {
     mostrarToast(`Abono de ${fmtCRC(abonoCRC)} registrado. Saldo restante: ${fmtCRC(nuevoSaldoCRC)} 💵`, "success");
@@ -1759,7 +1761,9 @@ function liquidarCuentaDirecto(idCuenta) {
   });
 
   renderizarCuentas();
-  mostrarToast(`¡Cuenta de ${cta.entidad} liquidada totalmente! 🎉`, "success");
+  renderizarFinanzas();
+  renderizarDashboard();
+  mostrarToast(`¡Cuenta de ${cta.entidad} liquidada totalmente! Dinero sumado a Caja 💵`, "success");
   if (window.confetti) window.confetti({ particleCount: 70, spread: 60, origin: { y: 0.8 } });
 }
 
@@ -1768,6 +1772,8 @@ function eliminarCuenta(idCuenta) {
   state.cuentas = state.cuentas.filter(c => c.id !== idCuenta);
   guardarCuentasLocal();
   renderizarCuentas();
+  renderizarFinanzas();
+  renderizarDashboard();
   mostrarToast("Cuenta eliminada.", "info");
   encolarAccionSincronizacion("eliminarCuenta", { id: idCuenta });
 }
@@ -3494,13 +3500,33 @@ function compartirReciboWhatsApp() {
 function calcularSaldosFinancieros() {
   const tcActual = Number(state.config.tipoCambio) || 520;
 
-  // 1. Ingresos a la Caja de Empresa por Ventas
+  // 1. Total Ventas Facturadas
   let totalVentasCRC = 0;
   let totalVentasUSD = 0;
+
   state.ventas.forEach(v => {
     totalVentasCRC += Number(v.totalCRC) || 0;
     totalVentasUSD += Number(v.totalUSD) || ((Number(v.totalCRC) || 0) / tcActual);
   });
+
+  // 1.1 Cuentas por Cobrar Pendientes (Dinero que aún no ha ingresado físicamente a caja)
+  let totalCxcPendienteCRC = 0;
+  let totalCxcPendienteUSD = 0;
+
+  (state.cuentas || []).forEach(cta => {
+    if (cta.tipo === "Por Cobrar" && (cta.estado || "Pendiente") !== "Pagado") {
+      const sCRC = Number(cta.saldoPendienteCRC || 0);
+      const sUSD = Number(cta.saldoPendienteUSD || 0) || (tcActual > 0 ? (sCRC / tcActual) : 0);
+      if (sCRC > 0) {
+        totalCxcPendienteCRC += sCRC;
+        totalCxcPendienteUSD += sUSD;
+      }
+    }
+  });
+
+  // Ventas efectivamente cobradas en caja = Total Ventas - Saldo Pendiente de Cobro
+  const ventasEfectivamenteCobradasCRC = Math.max(0, totalVentasCRC - totalCxcPendienteCRC);
+  const ventasEfectivamenteCobradasUSD = tcActual > 0 ? (ventasEfectivamenteCobradasCRC / tcActual) : 0;
 
   // 2. Compras según quién las pagó / financió
   let carlosFinanciaComprasCRC = 0;
@@ -3587,24 +3613,30 @@ function calcularSaldosFinancieros() {
   const danielDeudaCRC = danielTotalAportadoCRC - danielReembolsosCRC;
   const danielDeudaUSD = danielTotalAportadoUSD - danielReembolsosUSD;
 
-  // Saldo real en caja de la Empresa
+  // Saldo real en caja de la Empresa (Solo dinero cobrado efectivamente)
   const totalAportesSociosCRC = carlosAportesDirectosCRC + danielAportesDirectosCRC;
   const totalAportesSociosUSD = carlosAportesDirectosUSD + danielAportesDirectosUSD;
   const totalReembolsosSociosCRC = carlosReembolsosCRC + danielReembolsosCRC;
   const totalReembolsosSociosUSD = carlosReembolsosUSD + danielReembolsosUSD;
 
-  // Saldo = Ventas + Capital Propio Empresa + Aportes Socios - Compras Empresa - Reembolsos - Gastos
-  const saldoEmpresaCRC = totalVentasCRC + empresaCapitalPropioCRC + totalAportesSociosCRC - empresaPagaComprasCRC - totalReembolsosSociosCRC - empresaGastosCRC;
+  // Saldo Real = Ventas Cobradas en Mano + Capital Propio Empresa + Aportes Socios - Compras Empresa - Reembolsos - Gastos
+  const saldoEmpresaCRC = ventasEfectivamenteCobradasCRC + empresaCapitalPropioCRC + totalAportesSociosCRC - empresaPagaComprasCRC - totalReembolsosSociosCRC - empresaGastosCRC;
   const saldoEmpresaUSD = tcActual > 0 ? (saldoEmpresaCRC / tcActual) : 0;
 
   return {
     tcActual,
     totalVentasCRC,
     totalVentasUSD: tcActual > 0 ? (totalVentasCRC / tcActual) : 0,
+    cxcPendienteCRC: totalCxcPendienteCRC,
+    cxcPendienteUSD: totalCxcPendienteUSD,
+    ventasCobradasCRC: ventasEfectivamenteCobradasCRC,
+    ventasCobradasUSD: ventasEfectivamenteCobradasUSD,
     empresa: {
       saldoCRC: saldoEmpresaCRC,
       saldoUSD: saldoEmpresaUSD,
       ventasCRC: totalVentasCRC,
+      cxcPendienteCRC: totalCxcPendienteCRC,
+      cxcPendienteUSD: totalCxcPendienteUSD,
       gastosCRC: empresaGastosCRC + empresaPagaComprasCRC
     },
     carlos: {
@@ -3632,6 +3664,27 @@ function renderizarFinanzas() {
   const elEmpresaUSD = document.getElementById("finSaldoEmpresaUSD");
   if (elEmpresaCRC) elEmpresaCRC.textContent = fmtCRC(fin.empresa.saldoCRC);
   if (elEmpresaUSD) elEmpresaUSD.textContent = fmtUSD(fin.empresa.saldoUSD);
+
+  // Rubro Extra: Cuentas por Cobrar Pendientes (Dinero que falta por ingresar)
+  const elCxcCRC = document.getElementById("finCxcPendienteCRC");
+  const elCxcUSD = document.getElementById("finCxcPendienteUSD");
+  const elCxcBadge = document.getElementById("finCxcBadge");
+  if (elCxcCRC) elCxcCRC.textContent = fmtCRC(fin.empresa.cxcPendienteCRC);
+  if (elCxcUSD) elCxcUSD.textContent = `(${fmtUSD(fin.empresa.cxcPendienteUSD)} USD)`;
+  if (elCxcBadge) {
+    if (fin.empresa.cxcPendienteCRC > 0) {
+      elCxcBadge.classList.remove("hidden");
+    } else {
+      elCxcBadge.classList.add("hidden");
+    }
+  }
+
+  // Desglose de Ventas Cobradas
+  const elVentasCobradas = document.getElementById("finVentasCobradasCRC");
+  if (elVentasCobradas) elVentasCobradas.textContent = fmtCRC(fin.ventasCobradasCRC);
+
+  const elVentasFacturadas = document.getElementById("finVentasFacturadasCRC");
+  if (elVentasFacturadas) elVentasFacturadas.textContent = fmtCRC(fin.totalVentasCRC);
 
   // Actualizar Carlos
   const elCarlosCRC = document.getElementById("finDeudaCarlosCRC");
