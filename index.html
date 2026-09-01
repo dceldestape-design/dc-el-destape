@@ -1223,27 +1223,70 @@
           </div>
         </div>
 
-        <!-- Sales Prices USD and CRC -->
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="block font-semibold text-slate-300 mb-1">Precio Venta USD ($)</label>
-            <input type="number" step="0.01" id="prodPrecioVentaUSD" value="0" oninput="autoConvertirPrecio('USD')" class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-mono font-bold">
+        <!-- SECCIÓN 1: COSTOS Y MARGEN DE GANANCIA (%) -->
+        <div class="bg-slate-950/70 p-3.5 rounded-2xl border border-slate-800 space-y-3">
+          <div class="flex items-center justify-between border-b border-slate-800/80 pb-1.5">
+            <span class="font-bold text-amber-400 text-xs flex items-center gap-1.5">
+              <i data-lucide="calculator" class="w-3.5 h-3.5"></i>
+              <span>1. Costo y Margen de Ganancia</span>
+            </span>
+            <span class="text-[10px] text-slate-400 font-mono">Paso inicial</span>
           </div>
-          <div>
-            <label class="block font-semibold text-slate-300 mb-1">Precio Venta CRC (₡)</label>
-            <input type="number" step="1" id="prodPrecioVentaCRC" value="0" oninput="autoConvertirPrecio('CRC')" class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-mono font-bold">
+
+          <div class="grid grid-cols-2 gap-3">
+            <!-- Costo USD -->
+            <div>
+              <label class="block font-semibold text-slate-300 mb-1">Precio Costo USD ($) *</label>
+              <input type="number" step="0.01" min="0" id="prodCostoRefUSD" value="0" oninput="calcularMargenYPrecioRecomendado('costoUSD')" placeholder="0.00" class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-mono font-bold focus:border-amber-400">
+            </div>
+            <!-- Costo CRC Automático -->
+            <div>
+              <label class="block font-semibold text-slate-300 mb-1">Costo CRC (₡ Automático)</label>
+              <input type="number" step="1" id="prodCostoRefCRC" value="0" readonly class="w-full px-3 py-2 bg-slate-900/90 border border-slate-800 rounded-xl text-slate-400 font-mono font-bold cursor-not-allowed">
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <!-- Margen % -->
+            <div>
+              <label class="block font-semibold text-slate-300 mb-1">Margen Deseado (%)</label>
+              <div class="relative">
+                <input type="number" step="0.5" id="prodMargenPorcentaje" value="70" oninput="calcularMargenYPrecioRecomendado('margen')" placeholder="70" class="w-full px-3 py-2 bg-slate-800 border border-amber-500/40 rounded-xl text-amber-300 font-mono font-bold focus:border-amber-400">
+                <span class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold font-mono text-xs">%</span>
+              </div>
+            </div>
+            <!-- Precio Recomendado Calculado -->
+            <div>
+              <label class="block font-semibold text-emerald-400 mb-1">Precio Recomendado ($)</label>
+              <div class="flex items-center gap-1.5">
+                <input type="number" step="0.01" id="prodPrecioRecomendadoUSD" value="0" readonly class="w-full px-3 py-2 bg-emerald-950/40 border border-emerald-500/40 rounded-xl text-emerald-300 font-mono font-black text-xs cursor-default">
+                <button type="button" onclick="aplicarPrecioRecomendado()" title="Usar este precio de venta" class="px-2.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-[11px] font-bold active:scale-95 transition-all">
+                  Usar
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 
-        <!-- Reference Costs USD and CRC -->
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="block font-semibold text-slate-300 mb-1">Costo Ref. USD ($)</label>
-            <input type="number" step="0.01" id="prodCostoRefUSD" value="0" oninput="autoConvertirCosto('USD')" class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-mono">
+        <!-- SECCIÓN 2: PRECIO DE VENTA FINAL (MANUAL Y DIGITABLE) -->
+        <div class="bg-slate-950/70 p-3.5 rounded-2xl border border-slate-800 space-y-2.5">
+          <div class="flex items-center justify-between border-b border-slate-800/80 pb-1.5">
+            <span class="font-bold text-emerald-400 text-xs flex items-center gap-1.5">
+              <i data-lucide="tag" class="w-3.5 h-3.5"></i>
+              <span>2. Precio de Venta al Público</span>
+            </span>
+            <span class="text-[10px] text-slate-400 font-mono">Editable</span>
           </div>
-          <div>
-            <label class="block font-semibold text-slate-300 mb-1">Costo Ref. CRC (₡)</label>
-            <input type="number" step="1" id="prodCostoRefCRC" value="0" oninput="autoConvertirCosto('CRC')" class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-mono">
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block font-semibold text-slate-300 mb-1">Precio Venta USD ($) *</label>
+              <input type="number" step="0.01" id="prodPrecioVentaUSD" value="0" oninput="autoConvertirPrecio('USD')" class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-mono font-black text-sm focus:border-emerald-500">
+            </div>
+            <div>
+              <label class="block font-semibold text-slate-300 mb-1">Precio Venta CRC (₡) *</label>
+              <input type="number" step="1" id="prodPrecioVentaCRC" value="0" oninput="autoConvertirPrecio('CRC')" class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-mono font-black text-sm focus:border-emerald-500">
+            </div>
           </div>
         </div>
 
@@ -1852,6 +1895,6 @@
   </nav>
 
   <!-- Application Logic -->
-  <script src="app.js?v=20260831_03"></script>
+  <script src="app.js?v=20260831_07"></script>
 </body>
 </html>

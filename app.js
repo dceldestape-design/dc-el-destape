@@ -2187,12 +2187,24 @@ function abrirModalProducto(productoOcodigo = null) {
     document.getElementById("prodNombre").value = producto.nombre || "";
     document.getElementById("prodCategoria").value = producto.categoria || "";
     document.getElementById("prodImagenUrl").value = producto.imagenUrl || "";
-    document.getElementById("prodPrecioVentaUSD").value = Number(producto.precioVentaUSD || 0);
-    document.getElementById("prodPrecioVentaCRC").value = Number(producto.precioVentaCRC || 0);
-    document.getElementById("prodCostoRefUSD").value = Number(producto.costoRefUSD || 0);
+    const cUSD = Number(producto.costoRefUSD || 0);
+    const pUSD = Number(producto.precioVentaUSD || 0);
+    document.getElementById("prodCostoRefUSD").value = cUSD;
     document.getElementById("prodCostoRefCRC").value = Number(producto.costoRefCRC || 0);
+    
+    // Si ya tiene costo y precio, calcular el margen que tiene actualmente
+    let margenActual = 70;
+    if (cUSD > 0 && pUSD >= cUSD) {
+      margenActual = Number((((pUSD - cUSD) / cUSD) * 100).toFixed(1));
+    }
+    document.getElementById("prodMargenPorcentaje").value = margenActual;
+    
+    document.getElementById("prodPrecioVentaUSD").value = pUSD;
+    document.getElementById("prodPrecioVentaCRC").value = Number(producto.precioVentaCRC || 0);
     document.getElementById("prodStock").value = Number(producto.stockInicial || 0);
     document.getElementById("prodStockMinimo").value = Number(producto.stockMinimo || 2);
+    
+    calcularMargenYPrecioRecomendado('costoUSD', false);
     if (btnEliminar) btnEliminar.classList.remove("hidden");
   } else {
     titulo.innerHTML = `<i data-lucide="wine" class="w-5 h-5 text-amber-400"></i> Nuevo Licor`;
@@ -2200,7 +2212,13 @@ function abrirModalProducto(productoOcodigo = null) {
     document.getElementById("prodCodigo").disabled = false;
     document.getElementById("prodCodigo").value = "LIC-" + Math.floor(100 + Math.random() * 900);
     document.getElementById("prodImagenUrl").value = "";
+    document.getElementById("prodMargenPorcentaje").value = 70;
     document.getElementById("prodStockMinimo").value = 2;
+    document.getElementById("prodCostoRefUSD").value = "";
+    document.getElementById("prodCostoRefCRC").value = "0";
+    document.getElementById("prodPrecioRecomendadoUSD").value = "0";
+    document.getElementById("prodPrecioVentaUSD").value = "";
+    document.getElementById("prodPrecioVentaCRC").value = "";
     if (btnEliminar) btnEliminar.classList.add("hidden");
   }
 
@@ -2221,25 +2239,57 @@ function editarProducto(codigo) {
   if (p) abrirModalProducto(p);
 }
 
+// --------------------------------------------------------------------------
+// CÁLCULO DE MARGEN (%) Y PRECIO RECOMENDADO SEGÚN FÓRMULA DEL USUARIO:
+// Precio Recomendado = Precio Costo + (Precio Costo / 100 * Margen%)
+// --------------------------------------------------------------------------
+function calcularMargenYPrecioRecomendado(origen = 'costoUSD', autoAplicarVenta = true) {
+  const tc = Number(state.config.tipoCambio) || 520;
+  const costoUSD = parseFloat(document.getElementById("prodCostoRefUSD").value) || 0;
+  const margenPct = parseFloat(document.getElementById("prodMargenPorcentaje").value) || 0;
+
+  // 1. Costo Ref. en CRC automático: Costo USD * Tipo de Cambio
+  const costoCRC = Math.round(costoUSD * tc);
+  const inCostoCRC = document.getElementById("prodCostoRefCRC");
+  if (inCostoCRC) inCostoCRC.value = costoCRC;
+
+  // 2. Fórmula exacta: Costo + (Costo / 100 * Margen%)
+  const precioRecomendadoUSD = costoUSD + (costoUSD * (margenPct / 100));
+  const inRecUSD = document.getElementById("prodPrecioRecomendadoUSD");
+  if (inRecUSD) inRecUSD.value = precioRecomendadoUSD > 0 ? precioRecomendadoUSD.toFixed(2) : "0";
+
+  // 3. Si es un producto nuevo o se cambia el costo/margen, sugerir en los campos de venta si están vacíos o si autoAplicarVenta es true
+  const inVentaUSD = document.getElementById("prodPrecioVentaUSD");
+  const inVentaCRC = document.getElementById("prodPrecioVentaCRC");
+  
+  if (autoAplicarVenta && inVentaUSD) {
+    inVentaUSD.value = precioRecomendadoUSD > 0 ? precioRecomendadoUSD.toFixed(2) : "";
+    if (inVentaCRC) {
+      inVentaCRC.value = precioRecomendadoUSD > 0 ? Math.round(precioRecomendadoUSD * tc) : "";
+    }
+  }
+}
+
+function aplicarPrecioRecomendado() {
+  const recUSD = parseFloat(document.getElementById("prodPrecioRecomendadoUSD").value) || 0;
+  if (recUSD <= 0) {
+    mostrarToast("Ingresa primero el precio de costo en USD.", "info");
+    return;
+  }
+  const tc = Number(state.config.tipoCambio) || 520;
+  document.getElementById("prodPrecioVentaUSD").value = recUSD.toFixed(2);
+  document.getElementById("prodPrecioVentaCRC").value = Math.round(recUSD * tc);
+  mostrarToast("Precio recomendado aplicado a la venta 💵", "success");
+}
+
 function autoConvertirPrecio(origen) {
   const tc = Number(state.config.tipoCambio) || 520;
   if (origen === 'USD') {
     const usd = Number(document.getElementById("prodPrecioVentaUSD").value) || 0;
-    document.getElementById("prodPrecioVentaCRC").value = Math.round(usd * tc);
+    document.getElementById("prodPrecioVentaCRC").value = usd > 0 ? Math.round(usd * tc) : "";
   } else {
     const crc = Number(document.getElementById("prodPrecioVentaCRC").value) || 0;
-    document.getElementById("prodPrecioVentaUSD").value = (crc / tc).toFixed(2);
-  }
-}
-
-function autoConvertirCosto(origen) {
-  const tc = Number(state.config.tipoCambio) || 520;
-  if (origen === 'USD') {
-    const usd = Number(document.getElementById("prodCostoRefUSD").value) || 0;
-    document.getElementById("prodCostoRefCRC").value = Math.round(usd * tc);
-  } else {
-    const crc = Number(document.getElementById("prodCostoRefCRC").value) || 0;
-    document.getElementById("prodCostoRefUSD").value = (crc / tc).toFixed(2);
+    document.getElementById("prodPrecioVentaUSD").value = crc > 0 ? (crc / tc).toFixed(2) : "";
   }
 }
 
@@ -2272,9 +2322,19 @@ async function guardarProductoForm(e) {
   const esEdicion = !!state.productos[codigo];
   state.productos[codigo] = prodObj;
   guardarProductosLocal();
+  
+  // Si la categoría actual filtrada no coincide con la del nuevo producto, poner en "Todas"
+  if (state.categoriaSeleccionada !== "Todas" && state.categoriaSeleccionada !== categoria) {
+    state.categoriaSeleccionada = "Todas";
+  }
+  
+  // Limpiar texto de búsqueda para mostrar la lista completa
+  const inSearch = document.getElementById("searchInventory");
+  if (inSearch && inSearch.value) inSearch.value = "";
+
   renderizarTodo();
   cerrarModalProducto();
-  mostrarToast(esEdicion ? "Producto actualizado localmente." : "Producto agregado localmente.", "success");
+  mostrarToast(esEdicion ? "Producto actualizado correctamente." : "Producto agregado correctamente.", "success");
 
   // Encolar y sincronizar
   encolarAccionSincronizacion(esEdicion ? "actualizarProducto" : "crearProducto", { producto: prodObj });
@@ -2282,13 +2342,17 @@ async function guardarProductoForm(e) {
 
 async function eliminarProductoActual() {
   const codigo = document.getElementById("prodCodigo").value;
-  if (!confirm(`¿Eliminar ${codigo}?`)) return;
+  if (!confirm(`¿Eliminar definitivamente el producto ${codigo}?`)) return;
 
   delete state.productos[codigo];
   guardarProductosLocal();
+
+  const inSearch = document.getElementById("searchInventory");
+  if (inSearch && inSearch.value) inSearch.value = "";
+
   renderizarTodo();
   cerrarModalProducto();
-  mostrarToast("Producto eliminado localmente.", "info");
+  mostrarToast("Producto eliminado correctamente.", "info");
 
   // Encolar y sincronizar
   encolarAccionSincronizacion("eliminarProducto", { codigo });
@@ -4587,8 +4651,10 @@ async function _descargarDatosSheets(mostrarMensaje = false) {
 
     if (json.success && json.data) {
       if (json.data.productos && json.data.productos.length > 0) {
-        const mapa = {};
-        json.data.productos.forEach(p => { mapa[p.codigo] = p; });
+        const mapa = { ...state.productos };
+        json.data.productos.forEach(p => { 
+          if (p && p.codigo) mapa[p.codigo] = p; 
+        });
         state.productos = mapa;
         guardarProductosLocal();
       }
