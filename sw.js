@@ -1,4 +1,4 @@
-const CACHE_NAME = 'inventory-sheets-v32';
+const CACHE_NAME = 'inventory-sheets-v34';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',

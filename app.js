@@ -579,18 +579,18 @@ function renderizarDashboard() {
       const fecha = v.fecha ? new Date(v.fecha).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : "";
       const vend = v.vendedor || "Carlos";
       const vendColor = vend === "Daniel" ? "text-violet-400 bg-violet-950/60 border-violet-500/30" : "text-blue-400 bg-blue-950/60 border-blue-500/30";
-      const totCRC = Number(v.totalCRC || 0);
+      const totCRC = Number(v.totalCRC || (v.totalFinalCRC || 0));
       const totUSD = Number(v.totalUSD || 0);
-      const esPagoLuego = (v.metodoPago || "").toLowerCase().includes("luego") || (v.metodoPago || "").toLowerCase().includes("crédito");
-      const vUid = v.id ? `${v.id}_${v.codigo || ''}_${idx}` : `VTA_ROW_${idx}`;
+      const vCod = v.codigo || (v.items && v.items[0] ? v.items[0].codigo : '') || '';
+      const vUid = v.id ? `${v.id}_${vCod}_${idx}` : `VTA_ROW_${idx}`;
+      const esPagoLuego = String(v.metodoPago || "").toLowerCase().includes("luego") || String(v.metodoPago || "").toLowerCase().includes("crédito");
 
-      // Buscar si existe una cuenta asociada a esta venta
+      // Buscar si existe una cuenta asociada a ESTE movimiento específico
       const cuentaAsociada = (state.cuentas || []).find(cta => 
         cta.tipo === "Por Cobrar" && (
-          cta.referenciaId === v.id ||
           cta.referenciaId === vUid ||
-          (v.id && cta.referenciaId && cta.referenciaId.startsWith(v.id)) ||
-          (cta.entidad && v.cliente && cta.entidad.toLowerCase() === v.cliente.toLowerCase() && Math.abs(Number(cta.montoTotalCRC) - totCRC) < 1)
+          (v.id && cta.referenciaId === v.id) ||
+          (cta.referenciaId && v.id && cta.referenciaId.startsWith(`${v.id}_${vCod}`))
         )
       );
 
@@ -2792,31 +2792,34 @@ function pasarVentaIndividualACuentasPorCobrar(idxVenta) {
     return;
   }
 
-  const vUid = v.id ? `${v.id}_${v.codigo || ''}_${idxVenta}` : `VTA_ROW_${idxVenta}`;
+  const vCod = v.codigo || (v.items && v.items[0] ? v.items[0].codigo : '') || `PROD_${idxVenta}`;
+  const vUid = v.id ? `${v.id}_${vCod}_${idxVenta}` : `VTA_ROW_${idxVenta}_${Date.now()}`;
 
-  // Verificar si ESTA venta exacta ya existe en cuentas
+  // Verificar si ESTE movimiento exacto ya existe en cuentas
   const yaExiste = (state.cuentas || []).find(cta => 
-    cta.referenciaId === vUid || 
-    (cta.referenciaId === v.id && (!cta.notas || cta.notas.includes(v.codigo || '')))
+    cta.tipo === "Por Cobrar" && (
+      cta.referenciaId === vUid || 
+      (cta.referenciaId && cta.referenciaId === `${v.id}_${vCod}_${idxVenta}`)
+    )
   );
   
   if (yaExiste) {
-    mostrarToast("Esta venta ya está registrada en Cuentas por Cobrar.", "info");
+    mostrarToast("Este movimiento específico ya está registrado en Cuentas por Cobrar.", "info");
     cambiarVista("cuentas");
     return;
   }
 
-  const totCRC = Number(v.totalCRC || 0);
+  const totCRC = Number(v.totalCRC || (v.totalFinalCRC || 0));
   const totUSD = Number(v.totalUSD || 0);
   const cliNombre = v.cliente || "Cliente General";
   
   if (!cliNombre || cliNombre.toLowerCase() === "cliente general") {
-    mostrarToast("⚠️ No se puede pasar a CXC: la venta no tiene cliente específico asignado.", "error");
+    mostrarToast("⚠️ No se puede pasar a CXC: el movimiento no tiene cliente específico asignado.", "error");
     return;
   }
 
-  const nombreProd = v.nombre || (v.codigo ? `Licor (${v.codigo})` : "Venta");
-  const cantProd = Number(v.cantidad || 1);
+  const nombreProd = v.nombre || (v.items && v.items[0] ? v.items[0].nombre : (v.codigo ? `Licor (${v.codigo})` : "Venta"));
+  const cantProd = Number(v.cantidad || (v.items && v.items[0] ? v.items[0].cantidad : 1));
   
   // Buscar teléfono si está en el maestro de clientes
   let tel = "";
@@ -2828,12 +2831,12 @@ function pasarVentaIndividualACuentasPorCobrar(idxVenta) {
   }
 
   const cuentaObj = {
-    id: "CTA-" + Date.now().toString().slice(-6),
+    id: "CTA-" + Date.now().toString().slice(-6) + Math.floor(Math.random() * 90 + 10),
     fecha: v.fecha || new Date().toISOString(),
     tipo: "Por Cobrar",
     entidad: cliNombre,
     telefono: tel,
-    referenciaId: vUid, // ID único por fila para no colisionar con otras ventas del mismo cliente
+    referenciaId: vUid, // ID único por fila/movimiento exacto
     montoTotalCRC: totCRC,
     montoTotalUSD: totUSD,
     saldoPendienteCRC: totCRC,
@@ -2841,7 +2844,7 @@ function pasarVentaIndividualACuentasPorCobrar(idxVenta) {
     estado: "Pendiente",
     fechaVencimiento: "",
     vendedor: v.vendedor || "Carlos",
-    notas: `Venta: ${cantProd}x ${nombreProd} (${v.metodoPago || 'Efectivo'})`
+    notas: `Movimiento: ${cantProd}x ${nombreProd} (${v.metodoPago || 'Efectivo'})`
   };
 
   if (!state.cuentas) state.cuentas = [];
@@ -2849,7 +2852,7 @@ function pasarVentaIndividualACuentasPorCobrar(idxVenta) {
   guardarCuentasLocal();
   encolarAccionSincronizacion("registrarCuenta", { cuenta: cuentaObj });
   renderizarTodo();
-  mostrarToast(`Venta (${cantProd}x ${nombreProd}) de ${cliNombre} agregada a Cuentas por Cobrar 📋`, "success");
+  mostrarToast(`Cuenta por cobrar creada para: ${cantProd}x ${nombreProd} (${cliNombre}) 📋`, "success");
   cambiarVista("cuentas");
 }
 
