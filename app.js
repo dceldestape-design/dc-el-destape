@@ -1444,13 +1444,26 @@ function renderizarClientes() {
 
 function filtrarTipoCuenta(tipo) {
   state.filtroTipoCuenta = tipo;
-  ["cobrar", "pagar", "todos"].forEach(t => {
+  ["cobrar", "liquidadas", "pagar", "todos"].forEach(t => {
     const btn = document.getElementById("tabCuentas-" + t);
     if (!btn) return;
-    if ((t === "cobrar" && tipo === "Por Cobrar") || (t === "pagar" && tipo === "Por Pagar") || (t === "todos" && tipo === "todos")) {
-      btn.className = "py-2 rounded-lg bg-emerald-600 text-white shadow-md text-center transition-all";
+    if (
+      (t === "cobrar" && tipo === "Por Cobrar") || 
+      (t === "liquidadas" && tipo === "Liquidadas") || 
+      (t === "pagar" && tipo === "Por Pagar") || 
+      (t === "todos" && tipo === "todos")
+    ) {
+      if (tipo === "Por Cobrar") {
+        btn.className = "py-2 rounded-lg bg-emerald-600 text-white shadow-md text-center transition-all font-bold";
+      } else if (tipo === "Liquidadas") {
+        btn.className = "py-2 rounded-lg bg-cyan-700 text-white shadow-md text-center transition-all font-bold";
+      } else if (tipo === "Por Pagar") {
+        btn.className = "py-2 rounded-lg bg-rose-750 text-white shadow-md text-center transition-all font-bold";
+      } else {
+        btn.className = "py-2 rounded-lg bg-indigo-600 text-white shadow-md text-center transition-all font-bold";
+      }
     } else {
-      btn.className = "py-2 rounded-lg bg-transparent text-slate-400 hover:text-white text-center transition-all";
+      btn.className = "py-2 rounded-lg bg-transparent text-slate-400 hover:text-white text-center transition-all font-medium";
     }
   });
   renderizarCuentas();
@@ -1468,8 +1481,8 @@ function renderizarCuentas() {
   let totPagarCRC = 0, totPagarUSD = 0, countPagar = 0;
 
   state.cuentas.forEach(cta => {
-    const saldoCRC = Number(cta.saldoPendienteCRC || 0);
-    const saldoUSD = Number(cta.saldoPendienteUSD || 0);
+    const saldoCRC = Number(cta.saldoPendienteCRC !== undefined ? cta.saldoPendienteCRC : cta.montoTotalCRC);
+    const saldoUSD = Number(cta.saldoPendienteUSD !== undefined ? cta.saldoPendienteUSD : cta.montoTotalUSD);
     const estado = cta.estado || "Pendiente";
 
     if (estado !== "Pagado" && saldoCRC > 0) {
@@ -1503,15 +1516,27 @@ function renderizarCuentas() {
   const elCountTotal = document.getElementById("cuentasCountTotal");
   if (elCountTotal) elCountTotal.textContent = state.cuentas.length;
 
-  // Actualizar también widget en Dashboard
+  // Actualizar widget en Dashboard
   const dashCobrar = document.getElementById("dashCobrarCRC");
   const dashPagar = document.getElementById("dashPagarCRC");
   if (dashCobrar) dashCobrar.textContent = fmtCRC(totCobrarCRC);
   if (dashPagar) dashPagar.textContent = fmtCRC(totPagarCRC);
 
-  // Filtrar lista para mostrar
+  // Filtrar lista para mostrar según la pestaña seleccionada
   let lista = state.cuentas.filter(cta => {
-    if (filtroTipo !== "todos" && cta.tipo !== filtroTipo) return false;
+    const esPagado = cta.estado === "Pagado" || (Number(cta.saldoPendienteCRC || 0) <= 0);
+
+    if (filtroTipo === "Por Cobrar") {
+      // Solo cuentas por cobrar PENDIENTES o con abono parcial
+      if (cta.tipo !== "Por Cobrar" || esPagado) return false;
+    } else if (filtroTipo === "Liquidadas") {
+      // Solo cuentas ya LIQUIDADAS / PAGADAS
+      if (!esPagado) return false;
+    } else if (filtroTipo === "Por Pagar") {
+      // Solo cuentas por pagar
+      if (cta.tipo !== "Por Pagar") return false;
+    }
+
     if (q) {
       const ent = (cta.entidad || "").toLowerCase();
       const tel = (cta.telefono || "").toLowerCase();
@@ -1522,22 +1547,35 @@ function renderizarCuentas() {
     return true;
   });
 
-  // Ordenar: primero las pendientes con mayor saldo, luego las pagadas
+  // Ordenar: Pendientes con mayor saldo de primero, las más recientes primero
   lista.sort((a, b) => {
-    const aPag = a.estado === "Pagado" ? 1 : 0;
-    const bPag = b.estado === "Pagado" ? 1 : 0;
+    const aPag = (a.estado === "Pagado" || Number(a.saldoPendienteCRC || 0) <= 0) ? 1 : 0;
+    const bPag = (b.estado === "Pagado" || Number(b.saldoPendienteCRC || 0) <= 0) ? 1 : 0;
     if (aPag !== bPag) return aPag - bPag;
-    return (Number(b.saldoPendienteCRC || 0)) - (Number(a.saldoPendienteCRC || 0));
+    const saldoDiff = (Number(b.saldoPendienteCRC || 0)) - (Number(a.saldoPendienteCRC || 0));
+    if (saldoDiff !== 0) return saldoDiff;
+    return new Date(b.fecha || 0) - new Date(a.fecha || 0);
   });
 
   if (lista.length === 0) {
+    let mensajeVacio = "No hay cuentas registradas en esta sección.";
+    if (filtroTipo === "Por Cobrar") {
+      mensajeVacio = "¡Excelente! No tienes cuentas por cobrar pendientes de cobro 🎉";
+    } else if (filtroTipo === "Liquidadas") {
+      mensajeVacio = "No hay cuentas liquidadas en el historial.";
+    } else if (filtroTipo === "Por Pagar") {
+      mensajeVacio = "No tienes cuentas por pagar pendientes a proveedores.";
+    }
+
     cont.innerHTML = `
-      <div class="flex flex-col items-center justify-center py-12 text-slate-500 text-xs space-y-2 bg-slate-900/60 rounded-2xl border border-slate-800">
-        <i data-lucide="badge-check" class="w-10 h-10 stroke-1 text-slate-600"></i>
-        <span>${q ? "No hay cuentas que coincidan con la búsqueda." : "No hay cuentas registradas en esta sección."}</span>
-        <span class="text-[11px] text-slate-500 max-w-xs text-center mt-1">
-          Las cuentas por cobrar se generan automáticamente al vender con <b>'Pago Luego'</b> seleccionando un cliente registrado.
-        </span>
+      <div class="flex flex-col items-center justify-center py-12 text-slate-500 text-xs space-y-2 bg-slate-900/60 rounded-2xl border border-slate-800 text-center px-4">
+        <i data-lucide="${filtroTipo === 'Por Cobrar' ? 'badge-check' : 'folder-open'}" class="w-10 h-10 stroke-1 ${filtroTipo === 'Por Cobrar' ? 'text-emerald-500' : 'text-slate-600'}"></i>
+        <span class="font-bold text-slate-300">${q ? "No hay cuentas que coincidan con la búsqueda." : mensajeVacio}</span>
+        ${filtroTipo === "Por Cobrar" && !q ? `
+          <span class="text-[11px] text-slate-500 max-w-xs leading-relaxed">
+            Las nuevas cuentas por cobrar se registran al vender con <b>'Pago Luego'</b> o usando <b>'+ Cta Cobrar'</b> en los movimientos.
+          </span>
+        ` : ''}
       </div>
     `;
     inicializarIconos();

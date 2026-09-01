@@ -759,10 +759,13 @@
         </div>
       </div>
 
-      <!-- Filtros de Pestañas (Por Cobrar / Por Pagar / Todos) -->
-      <div class="grid grid-cols-3 gap-1 bg-slate-950/80 p-1 rounded-xl border border-slate-700/60 text-xs font-bold font-mono">
+      <!-- Filtros de Pestañas (Por Cobrar / Liquidadas / Por Pagar / Todos) -->
+      <div class="grid grid-cols-4 gap-1 bg-slate-950/80 p-1 rounded-xl border border-slate-700/60 text-[11px] font-bold font-mono">
         <button type="button" id="tabCuentas-cobrar" onclick="filtrarTipoCuenta('Por Cobrar')" class="py-2 rounded-lg bg-emerald-600 text-white shadow-md text-center transition-all">
           Por Cobrar
+        </button>
+        <button type="button" id="tabCuentas-liquidadas" onclick="filtrarTipoCuenta('Liquidadas')" class="py-2 rounded-lg bg-transparent text-slate-400 hover:text-white text-center transition-all">
+          Liquidadas
         </button>
         <button type="button" id="tabCuentas-pagar" onclick="filtrarTipoCuenta('Por Pagar')" class="py-2 rounded-lg bg-transparent text-slate-400 hover:text-white text-center transition-all">
           Por Pagar
@@ -1895,6 +1898,6 @@
   </nav>
 
   <!-- Application Logic -->
-  <script src="app.js?v=20260901_02"></script>
+  <script src="app.js?v=20260901_03"></script>
 </body>
 </html>
