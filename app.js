@@ -2639,6 +2639,14 @@ function renderizarListaCompraActual() {
     }).join("");
   }
 
+  // Sumar Costo de Envío de la Compra si se especificó
+  const tc = Number(document.getElementById("compraTipoCambio")?.value) || Number(state.config.tipoCambio) || 520;
+  const envioCRC = Number(document.getElementById("compraEnvioCRC")?.value) || 0;
+  const envioUSD = tc > 0 ? (envioCRC / tc) : 0;
+
+  totalCRC += envioCRC;
+  totalUSD += envioUSD;
+
   if (totalCRCEl) totalCRCEl.textContent = fmtCRC(totalCRC);
   if (totalUSDEl) totalUSDEl.textContent = `${fmtUSD(totalUSD)} USD`;
   inicializarIconos();
@@ -2672,6 +2680,8 @@ async function guardarCompra() {
   const tc = Number(document.getElementById("compraTipoCambio").value) || Number(state.config.tipoCambio) || 520;
   const proveedor = document.getElementById("compraProveedor").value.trim();
   const notas = document.getElementById("compraNotas").value.trim();
+  const envioCRC = Number(document.getElementById("compraEnvioCRC")?.value) || 0;
+  const envioUSD = tc > 0 ? (envioCRC / tc) : 0;
 
   let totalCant = 0;
   let totalUSD = 0;
@@ -2695,8 +2705,11 @@ async function guardarCompra() {
     };
   });
 
-  const idCompra = "CMP-" + Date.now().toString().slice(-6);
+  // Sumar flete/envío al total gastado en la compra (Productos + Envío)
+  totalCRC += envioCRC;
+  totalUSD += envioUSD;
 
+  const idCompra = "CMP-" + Date.now().toString().slice(-6);
   const esCredito = document.getElementById("compraEsCredito") ? document.getElementById("compraEsCredito").checked : false;
 
   const compraObj = {
@@ -2708,9 +2721,11 @@ async function guardarCompra() {
     pagadoPor: esCredito ? "Pendiente (Crédito)" : pagadoPor,
     esCredito,
     cantidad: totalCant,
-    costoUnitarioUSD: totalUSD / (totalCant || 1),
+    costoUnitarioUSD: (totalUSD - envioUSD) / (totalCant || 1),
     tipoCambio: tc,
-    costoUnitarioCRC: totalCRC / (totalCant || 1),
+    costoUnitarioCRC: (totalCRC - envioCRC) / (totalCant || 1),
+    costoEnvioCRC: envioCRC,
+    costoEnvioUSD: envioUSD,
     totalUSD,
     totalCRC,
     proveedor: proveedor || "Proveedor General",
@@ -2748,6 +2763,7 @@ async function guardarCompra() {
   // 3. Limpiar lista de compra actual y campos
   state.listaCompraActual = [];
   document.getElementById("compraProveedor").value = "";
+  if (document.getElementById("compraEnvioCRC")) document.getElementById("compraEnvioCRC").value = 0;
   document.getElementById("compraNotas").value = "";
   const chkCredito = document.getElementById("compraEsCredito");
   if (chkCredito) chkCredito.checked = false;
@@ -3385,6 +3401,11 @@ async function completarVenta() {
     }
   }
 
+  // Costo de Envío de la venta (gasto de entrega que resta del ingreso a la empresa)
+  const envioVentaCRC = Number(document.getElementById("posEnvioCRC")?.value) || 0;
+  const tcActual = Number(state.config.tipoCambio) || 520;
+  const envioVentaUSD = tcActual > 0 ? (envioVentaCRC / tcActual) : 0;
+
   const idVenta = "VTA-" + Date.now().toString().slice(-6);
 
   const ventaObj = {
@@ -3395,8 +3416,10 @@ async function completarVenta() {
     totalCRC: totalBrutoCRC,
     totalFinalCRC,
     totalUSD,
-    gananciaCRC: gananciaCRC - descuentoPuntos,
-    gananciaUSD,
+    costoEnvioCRC: envioVentaCRC,
+    costoEnvioUSD: envioVentaUSD,
+    gananciaCRC: (gananciaCRC - descuentoPuntos) - envioVentaCRC,
+    gananciaUSD: gananciaUSD - envioVentaUSD,
     cliente: clienteNombre,
     clienteId,
     clienteTelefono,
@@ -3416,28 +3439,44 @@ async function completarVenta() {
   guardarVentasLocal();
   state.ultimaVentaCompletada = ventaObj;
 
-  // --- Si es "Pago Luego", crear automáticamente registro en Cuentas por Cobrar ---
+  // --- Si es "Pago Luego", crear automáticamente registro en Cuentas por Cobrar POR CADA PRODUCTO ---
   if (state.metodoPagoSeleccionado === "Pago Luego") {
-    const cuentaObj = {
-      id: "CTA-" + Date.now().toString().slice(-6),
-      fecha: ventaObj.fecha,
-      tipo: "Por Cobrar",
-      entidad: clienteNombre,
-      telefono: clienteTelefono || "",
-      referenciaId: idVenta,
-      montoTotalCRC: totalFinalCRC,
-      montoTotalUSD: totalUSD,
-      saldoPendienteCRC: totalFinalCRC,
-      saldoPendienteUSD: totalUSD,
-      estado: "Pendiente",
-      fechaVencimiento: "",
-      vendedor,
-      notas: `Venta POS ${idVenta} a crédito / pago posterior`
-    };
-    state.cuentas.unshift(cuentaObj);
+    if (!state.cuentas) state.cuentas = [];
+    
+    // Proporción de descuento de puntos si hubo
+    const factorDescuento = totalBrutoCRC > 0 ? (totalFinalCRC / totalBrutoCRC) : 1;
+    
+    ventaObj.items.forEach((it, itIdx) => {
+      const itSubBrutoCRC = it.cantidad * it.precioVentaCRC;
+      const itSubCRC = Math.round(itSubBrutoCRC * factorDescuento);
+      const itSubUSD = it.cantidad * it.precioVentaUSD;
+      const itCod = it.codigo || `PROD_${itIdx}`;
+      const itUid = `${idVenta}_${itCod}_${itIdx}`;
+      const uniqueSuffix = Math.floor(Math.random() * 900 + 100);
+
+      const cuentaObj = {
+        id: "CTA-" + Date.now().toString().slice(-6) + uniqueSuffix,
+        fecha: ventaObj.fecha,
+        tipo: "Por Cobrar",
+        entidad: clienteNombre,
+        telefono: clienteTelefono || "",
+        referenciaId: itUid, // ID único por cada producto de la venta
+        montoTotalCRC: itSubCRC,
+        montoTotalUSD: itSubUSD,
+        saldoPendienteCRC: itSubCRC,
+        saldoPendienteUSD: itSubUSD,
+        estado: "Pendiente",
+        fechaVencimiento: "",
+        vendedor,
+        notas: `Venta POS: ${it.cantidad}x ${it.nombre} (${idVenta})`
+      };
+
+      state.cuentas.unshift(cuentaObj);
+      encolarAccionSincronizacion("registrarCuenta", { cuenta: cuentaObj });
+    });
+
     guardarCuentasLocal();
-    encolarAccionSincronizacion("registrarCuenta", { cuenta: cuentaObj });
-    mostrarToast(`Venta guardada y añadida a Cuentas por Cobrar (${clienteNombre}) 📋`, "info");
+    mostrarToast(`Venta guardada: ${ventaObj.items.length} cuenta(s) por cobrar creadas para ${clienteNombre} 📋`, "info");
   }
 
   if (window.confetti) {
@@ -3449,6 +3488,7 @@ async function completarVenta() {
   state.clienteSeleccionado = null;
   state.descuentoPuntosAplicado = 0;
   document.getElementById("cashReceived").value = "";
+  if (document.getElementById("posEnvioCRC")) document.getElementById("posEnvioCRC").value = "0";
   const clienteInput = document.getElementById("posClienteInput");
   if (clienteInput) clienteInput.value = "";
 
@@ -3621,13 +3661,18 @@ function compartirReciboWhatsApp() {
   if (esPedido) {
     texto += `📦 *TOTAL BOTELLAS ENCARGADAS:* ${totalBotellas} unids\n`;
     texto += `📌 *Estado:* Pedido registrado (en gestión con proveedor)\n\n`;
-    texto += `¡Hemos anotado tu pedido de licores! Te contactaremos tan pronto las tengamos disponibles. 🍷`;
+    texto += `¡Hemos anotado tu pedido de licores! Te contactaremos tan pronto las tengamos disponibles. 🍷\n\n`;
   } else {
     texto += `💳 *Método de Pago:* ${v.metodoPago || "Efectivo"}\n`;
     texto += `💵 *TOTAL CRC:* ${fmtCRC(v.totalFinalCRC || v.totalCRC)}\n`;
     texto += `💵 *TOTAL USD:* ${fmtUSD(v.totalUSD)}\n\n`;
-    texto += `¡Muchas gracias por su preferencia! 🍷`;
+    texto += `¡Muchas gracias por su preferencia! 🍷\n\n`;
   }
+
+  // Redes sociales al final con salto de línea
+  texto += `📱 *Redes sociales:*\n`;
+  texto += `📷 Instagram:\nhttps://www.instagram.com/dceldestape\n\n`;
+  texto += `🔵 Facebook:\nhttps://www.facebook.com/share/1CHT3FRSc6/`;
 
   const encoded = encodeURIComponent(texto);
   const phoneClient = v.clienteTelefono ? v.clienteTelefono.replace(/[^0-9]/g, "") : "";
@@ -3637,13 +3682,19 @@ function compartirReciboWhatsApp() {
 function calcularSaldosFinancieros() {
   const tcActual = Number(state.config.tipoCambio) || 520;
 
-  // 1. Total Ventas Facturadas
+  // 1. Total Ventas Facturadas y Gastos de Envío de Ventas
   let totalVentasCRC = 0;
   let totalVentasUSD = 0;
+  let totalEnvioVentasCRC = 0;
+  let totalEnvioVentasUSD = 0;
 
   state.ventas.forEach(v => {
-    totalVentasCRC += Number(v.totalCRC) || 0;
-    totalVentasUSD += Number(v.totalUSD) || ((Number(v.totalCRC) || 0) / tcActual);
+    totalVentasCRC += Number(v.totalFinalCRC !== undefined ? v.totalFinalCRC : v.totalCRC) || 0;
+    totalVentasUSD += Number(v.totalUSD) || ((Number(v.totalFinalCRC || v.totalCRC) || 0) / tcActual);
+    const envCRC = Number(v.costoEnvioCRC || 0);
+    const envUSD = Number(v.costoEnvioUSD || (tcActual > 0 ? envCRC / tcActual : 0));
+    totalEnvioVentasCRC += envCRC;
+    totalEnvioVentasUSD += envUSD;
   });
 
   // 1.1 Cuentas por Cobrar Pendientes (Dinero que aún no ha ingresado físicamente a caja)
@@ -3661,11 +3712,12 @@ function calcularSaldosFinancieros() {
     }
   });
 
-  // Ventas efectivamente cobradas en caja = Total Ventas - Saldo Pendiente de Cobro
-  const ventasEfectivamenteCobradasCRC = Math.max(0, totalVentasCRC - totalCxcPendienteCRC);
+  // Ventas efectivamente cobradas en caja = (Total Facturado - CXC Pendiente) - Costo de Envío de las ventas
+  const ventasFacturadasCobradasCRC = Math.max(0, totalVentasCRC - totalCxcPendienteCRC);
+  const ventasEfectivamenteCobradasCRC = Math.max(0, ventasFacturadasCobradasCRC - totalEnvioVentasCRC);
   const ventasEfectivamenteCobradasUSD = tcActual > 0 ? (ventasEfectivamenteCobradasCRC / tcActual) : 0;
 
-  // 2. Compras según quién las pagó / financió
+  // 2. Compras según quién las pagó / financió (incluye flete/envío si se pagó en la compra)
   let carlosFinanciaComprasCRC = 0;
   let carlosFinanciaComprasUSD = 0;
   let danielFinanciaComprasCRC = 0;
@@ -3676,8 +3728,10 @@ function calcularSaldosFinancieros() {
   state.compras.forEach(c => {
     const cant = Number(c.cantidad) || 1;
     const tc = Number(c.tipoCambio) || tcActual;
-    const cUSD = cant * (Number(c.costoUnitarioUSD) || 0);
-    const cCRC = cant * (Number(c.costoUnitarioCRC) || (cUSD * tc));
+    const envioCompCRC = Number(c.costoEnvioCRC || 0);
+    const envioCompUSD = Number(c.costoEnvioUSD || (tc > 0 ? envioCompCRC / tc : 0));
+    const cUSD = Number(c.totalUSD) || (cant * (Number(c.costoUnitarioUSD) || 0) + envioCompUSD);
+    const cCRC = Number(c.totalCRC) || (cant * (Number(c.costoUnitarioCRC) || 0) + envioCompCRC);
     const pagador = c.pagadoPor || c.vendedor || "Carlos";
 
     if (pagador === "Carlos") {
@@ -3686,7 +3740,7 @@ function calcularSaldosFinancieros() {
     } else if (pagador === "Daniel") {
       danielFinanciaComprasCRC += cCRC;
       danielFinanciaComprasUSD += cUSD;
-    } else { // "Empresa"
+    } else if (pagador === "Empresa") {
       empresaPagaComprasCRC += cCRC;
       empresaPagaComprasUSD += cUSD;
     }
@@ -3750,13 +3804,13 @@ function calcularSaldosFinancieros() {
   const danielDeudaCRC = danielTotalAportadoCRC - danielReembolsosCRC;
   const danielDeudaUSD = danielTotalAportadoUSD - danielReembolsosUSD;
 
-  // Saldo real en caja de la Empresa (Solo dinero cobrado efectivamente)
+  // Saldo real en caja de la Empresa (Solo dinero cobrado efectivamente menos envíos)
   const totalAportesSociosCRC = carlosAportesDirectosCRC + danielAportesDirectosCRC;
   const totalAportesSociosUSD = carlosAportesDirectosUSD + danielAportesDirectosUSD;
   const totalReembolsosSociosCRC = carlosReembolsosCRC + danielReembolsosCRC;
   const totalReembolsosSociosUSD = carlosReembolsosUSD + danielReembolsosUSD;
 
-  // Saldo Real = Ventas Cobradas en Mano + Capital Propio Empresa + Aportes Socios - Compras Empresa - Reembolsos - Gastos
+  // Saldo Real = Ventas Netas Cobradas + Capital Propio Empresa + Aportes Socios - Compras Empresa - Reembolsos - Gastos
   const saldoEmpresaCRC = ventasEfectivamenteCobradasCRC + empresaCapitalPropioCRC + totalAportesSociosCRC - empresaPagaComprasCRC - totalReembolsosSociosCRC - empresaGastosCRC;
   const saldoEmpresaUSD = tcActual > 0 ? (saldoEmpresaCRC / tcActual) : 0;
 
@@ -3764,6 +3818,8 @@ function calcularSaldosFinancieros() {
     tcActual,
     totalVentasCRC,
     totalVentasUSD: tcActual > 0 ? (totalVentasCRC / tcActual) : 0,
+    totalEnvioVentasCRC,
+    totalEnvioVentasUSD,
     cxcPendienteCRC: totalCxcPendienteCRC,
     cxcPendienteUSD: totalCxcPendienteUSD,
     ventasCobradasCRC: ventasEfectivamenteCobradasCRC,
@@ -3772,6 +3828,7 @@ function calcularSaldosFinancieros() {
       saldoCRC: saldoEmpresaCRC,
       saldoUSD: saldoEmpresaUSD,
       ventasCRC: totalVentasCRC,
+      enviosVentasCRC: totalEnvioVentasCRC,
       cxcPendienteCRC: totalCxcPendienteCRC,
       cxcPendienteUSD: totalCxcPendienteUSD,
       gastosCRC: empresaGastosCRC + empresaPagaComprasCRC
