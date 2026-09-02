@@ -3683,18 +3683,42 @@ function calcularSaldosFinancieros() {
   const tcActual = Number(state.config.tipoCambio) || 520;
 
   // 1. Total Ventas Facturadas y Gastos de Envío de Ventas
+  // IMPORTANTE: state.ventas puede tener UNA fila por producto cuando vienen de Sheets,
+  // por lo que hay que deduplicar tanto el total como el envío por ID de venta.
   let totalVentasCRC = 0;
   let totalVentasUSD = 0;
   let totalEnvioVentasCRC = 0;
   let totalEnvioVentasUSD = 0;
 
+  // Primero, si la venta tiene items[] (formato local), usarla directamente.
+  // Si no (formato Sheets fila-por-producto), deduplicar por ID.
+  const ventasIdSet = new Set();
+
   state.ventas.forEach(v => {
-    totalVentasCRC += Number(v.totalFinalCRC !== undefined ? v.totalFinalCRC : v.totalCRC) || 0;
-    totalVentasUSD += Number(v.totalUSD) || ((Number(v.totalFinalCRC || v.totalCRC) || 0) / tcActual);
-    const envCRC = Number(v.costoEnvioCRC || 0);
-    const envUSD = Number(v.costoEnvioUSD || (tcActual > 0 ? envCRC / tcActual : 0));
-    totalEnvioVentasCRC += envCRC;
-    totalEnvioVentasUSD += envUSD;
+    const vid = v.id || "";
+
+    if (v.items && Array.isArray(v.items)) {
+      // Formato local: objeto completo con items[], procesar una sola vez
+      totalVentasCRC += Number(v.totalFinalCRC !== undefined ? v.totalFinalCRC : v.totalCRC) || 0;
+      totalVentasUSD += Number(v.totalUSD) || 0;
+      const envCRC = Number(v.costoEnvioCRC || 0);
+      const envUSD = Number(v.costoEnvioUSD || (tcActual > 0 ? envCRC / tcActual : 0));
+      totalEnvioVentasCRC += envCRC;
+      totalEnvioVentasUSD += envUSD;
+    } else {
+      // Formato Sheets: una fila por producto. Sumar totalCRC de cada fila individualmente,
+      // pero el envío solo se suma una vez por ID de venta.
+      totalVentasCRC += Number(v.totalCRC) || 0;
+      totalVentasUSD += Number(v.totalUSD) || 0;
+
+      if (vid && !ventasIdSet.has(vid)) {
+        ventasIdSet.add(vid);
+        const envCRC = Number(v.costoEnvioCRC || 0);
+        const envUSD = Number(v.costoEnvioUSD || (tcActual > 0 ? envCRC / tcActual : 0));
+        totalEnvioVentasCRC += envCRC;
+        totalEnvioVentasUSD += envUSD;
+      }
+    }
   });
 
   // 1.1 Cuentas por Cobrar Pendientes (Dinero que aún no ha ingresado físicamente a caja)
@@ -4557,6 +4581,18 @@ function reproducirBeep() {
 let sincronizandoCola = false;
 
 function encolarAccionSincronizacion(accion, datos) {
+  if (!state.colaSincronizacion) state.colaSincronizacion = [];
+
+  // Deduplicar en cola local para evitar reencolar el mismo objeto idéntico
+  const payloadStr = JSON.stringify(datos || {});
+  const yaExisteEnCola = state.colaSincronizacion.some(it => 
+    it.accion === accion && JSON.stringify(it.datos || {}) === payloadStr
+  );
+  if (yaExisteEnCola) {
+    console.log("[SYNC] Acción ya en cola pendiente, evitando duplicar:", accion);
+    return;
+  }
+
   const item = {
     id: "SYNC-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6),
     accion: accion,
@@ -4564,7 +4600,6 @@ function encolarAccionSincronizacion(accion, datos) {
     fecha: new Date().toISOString()
   };
 
-  if (!state.colaSincronizacion) state.colaSincronizacion = [];
   state.colaSincronizacion.push(item);
   guardarColaLocal();
   actualizarIndicadorOffline();
@@ -4743,69 +4778,83 @@ async function _descargarDatosSheets(mostrarMensaje = false) {
     console.log("[SYNC] Respuesta de Sheets:", JSON.stringify({ 
       success: json.success, 
       pedidosCount: json.data ? (json.data.pedidos || []).length : "N/A",
-      productosCount: json.data ? (json.data.productos || []).length : "N/A",
-      pedidosPrimeros: json.data && json.data.pedidos ? json.data.pedidos.slice(0,2) : []
+      productosCount: json.data ? (json.data.productos || []).length : "N/A"
     }));
 
     if (json.success && json.data) {
-      if (json.data.productos && json.data.productos.length > 0) {
-        const mapa = { ...state.productos };
-        json.data.productos.forEach(p => { 
-          if (p && p.codigo) mapa[p.codigo] = p; 
-        });
+      // 1. Productos: Reflejar fielmente la hoja Productos de Sheets
+      if (json.data.productos !== undefined) {
+        const mapa = {};
+        if (Array.isArray(json.data.productos)) {
+          json.data.productos.forEach(p => { 
+            if (p && p.codigo) mapa[p.codigo] = p; 
+          });
+        }
         state.productos = mapa;
         guardarProductosLocal();
       }
-      if (json.data.ultimasCompras && json.data.ultimasCompras.length > 0) {
-        state.compras = json.data.ultimasCompras;
+
+      // 2. Compras: Reflejar fielmente la hoja Compras de Sheets
+      if (json.data.ultimasCompras !== undefined || json.data.compras !== undefined) {
+        state.compras = json.data.ultimasCompras || json.data.compras || [];
         guardarComprasLocal();
       }
-      if (json.data.ultimasVentas && json.data.ultimasVentas.length > 0) {
-        state.ventas = json.data.ultimasVentas;
+
+      // 3. Ventas: Reflejar fielmente la hoja Ventas de Sheets
+      if (json.data.ultimasVentas !== undefined || json.data.ventas !== undefined) {
+        state.ventas = json.data.ultimasVentas || json.data.ventas || [];
         guardarVentasLocal();
       }
-      if (json.data.finanzas && json.data.finanzas.length > 0) {
-        state.movimientosDinero = json.data.finanzas;
+
+      // 4. Finanzas: Reflejar fielmente la hoja Finanzas de Sheets
+      if (json.data.finanzas !== undefined) {
+        state.movimientosDinero = Array.isArray(json.data.finanzas) ? json.data.finanzas : [];
         guardarFinanzasLocal();
       }
-      if (json.data.clientes) {
+
+      // 5. Clientes: Reflejar fielmente la hoja Clientes de Sheets
+      if (json.data.clientes !== undefined) {
         const mapaCli = {};
         if (Array.isArray(json.data.clientes)) {
-          json.data.clientes.forEach(c => { if (c.id) mapaCli[c.id] = c; });
-        } else if (typeof json.data.clientes === "object") {
+          json.data.clientes.forEach(c => { if (c && c.id) mapaCli[c.id] = c; });
+        } else if (typeof json.data.clientes === "object" && json.data.clientes !== null) {
           Object.assign(mapaCli, json.data.clientes);
         }
-        if (Object.keys(mapaCli).length > 0) {
-          state.clientes = mapaCli;
-          guardarClientesLocal();
-        }
+        state.clientes = mapaCli;
+        guardarClientesLocal();
       }
-      // Pedidos: fusionar Sheets + pendientes locales en cola
-      if (json.data.pedidos && Array.isArray(json.data.pedidos)) {
-        const idsPedidosSheets = new Set(json.data.pedidos.map(p => p.id));
+
+      // 6. Pedidos: sincronizar Sheets + únicamente los pedidos pendientes en cola offline local
+      if (json.data.pedidos !== undefined) {
+        const pedidosSheets = Array.isArray(json.data.pedidos) ? json.data.pedidos : [];
+        const idsPedidosSheets = new Set(pedidosSheets.map(p => p.id));
         const pedidosSoloLocales = (state.pedidos || []).filter(p =>
-          !idsPedidosSheets.has(p.id) &&
+          p && p.id && !idsPedidosSheets.has(p.id) &&
           (state.colaSincronizacion || []).some(q => q.datos && q.datos.pedido && q.datos.pedido.id === p.id)
         );
-        state.pedidos = [...json.data.pedidos, ...pedidosSoloLocales];
+        state.pedidos = [...pedidosSheets, ...pedidosSoloLocales];
         guardarPedidosLocal();
-        console.log("[SYNC] Pedidos cargados:", state.pedidos.length, "| Locales pendientes cola:", pedidosSoloLocales.length);
       }
-      if (json.data.cuentas && Array.isArray(json.data.cuentas)) {
-        const idsCuentasSheets = new Set(json.data.cuentas.map(c => c.id || c.referenciaId));
+
+      // 7. Cuentas: sincronizar Sheets + únicamente las cuentas pendientes en cola offline local
+      if (json.data.cuentas !== undefined) {
+        const cuentasSheets = Array.isArray(json.data.cuentas) ? json.data.cuentas : [];
+        const idsCuentasSheets = new Set(cuentasSheets.map(c => c.id || c.referenciaId));
         const cuentasSoloLocales = (state.cuentas || []).filter(c =>
+          c && (c.id || c.referenciaId) &&
           !idsCuentasSheets.has(c.id) && !idsCuentasSheets.has(c.referenciaId) &&
           (state.colaSincronizacion || []).some(q => q.datos && q.datos.cuenta && (q.datos.cuenta.id === c.id || q.datos.cuenta.referenciaId === c.referenciaId))
         );
-        state.cuentas = [...json.data.cuentas, ...cuentasSoloLocales];
+        state.cuentas = [...cuentasSheets, ...cuentasSoloLocales];
         guardarCuentasLocal();
       }
 
       renderizarTodo();
       actualizarBadgeConexion();
       if (mostrarMensaje) {
-        const nPed = (state.pedidos || []).filter(p => p.estado === "pendiente" || !p.estado).length;
-        mostrarToast(`📊 Sincronizado — ${nPed} encargo(s) pendiente(s)`, "success");
+        const nProd = Object.keys(state.productos || {}).length;
+        const nFin = (state.movimientosDinero || []).length;
+        mostrarToast(`📊 Sincronizado al 100% con Sheets (${nProd} productos, ${nFin} mov. dinero)`, "success");
       }
     } else {
       console.warn("[SYNC] Respuesta inesperada:", json);
@@ -5004,13 +5053,34 @@ async function forzarActualizacionApp() {
 }
 
 function limpiarCacheLocal() {
-  if (confirm("¿Borrar todos los datos locales de prueba y reiniciar la aplicación?")) {
+  if (confirm("¿Borrar todos los datos locales y sincronizar todo desde cero directamente con Google Sheets?")) {
     const sheetsUrl = state.config.sheetsUrl;
+    const config = { ...state.config };
     localStorage.clear();
+    
+    // Restaurar configuración básica
     if (sheetsUrl) {
-      localStorage.setItem("inv_config_v2", JSON.stringify({ sheetsUrl }));
+      localStorage.setItem("inv_config_v2", JSON.stringify(config));
     }
-    location.reload();
+    
+    // Reiniciar estado en memoria
+    state.productos = {};
+    state.compras = [];
+    state.ventas = [];
+    state.pedidos = [];
+    state.cuentas = [];
+    state.movimientosDinero = [];
+    state.clientes = {};
+    state.colaSincronizacion = [];
+
+    renderizarTodo();
+    mostrarToast("Memoria local reiniciada. Descargando datos limpios de Sheets...", "info");
+
+    if (sheetsUrl) {
+      _descargarDatosSheets(true);
+    } else {
+      location.reload();
+    }
   }
 }
 
