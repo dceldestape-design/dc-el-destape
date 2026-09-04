@@ -147,6 +147,22 @@
         </div>
       </div>
 
+      <!-- Multi-Seller View Switcher Tab in Dashboard (Carlos / Daniel / Consolidado) -->
+      <div class="grid grid-cols-3 gap-1 bg-slate-950/80 p-1 rounded-2xl border border-slate-800 text-xs font-bold font-mono">
+        <button id="dashTabVendedor-Carlos" onclick="cambiarVistaVendedor('Carlos')" class="py-2 rounded-xl bg-indigo-600 text-white shadow-md flex items-center justify-center gap-1 active:scale-95 transition-all">
+          <span class="w-2 h-2 rounded-full bg-blue-400"></span>
+          <span>Carlos</span>
+        </button>
+        <button id="dashTabVendedor-Daniel" onclick="cambiarVistaVendedor('Daniel')" class="py-2 rounded-xl bg-transparent text-slate-400 hover:text-white flex items-center justify-center gap-1 active:scale-95 transition-all">
+          <span class="w-2 h-2 rounded-full bg-violet-400"></span>
+          <span>Daniel</span>
+        </button>
+        <button id="dashTabVendedor-Consolidado" onclick="cambiarVistaVendedor('Consolidado')" class="py-2 rounded-xl bg-transparent text-slate-400 hover:text-white flex items-center justify-center gap-1 active:scale-95 transition-all">
+          <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+          <span>Total</span>
+        </button>
+      </div>
+
       <!-- Metrics Overview Cards (CRC Principal, USD Referencia) -->
       <div class="grid grid-cols-2 gap-3">
         
@@ -1932,6 +1948,6 @@
   </nav>
 
   <!-- Application Logic -->
-  <script src="app.js?v=20260903_01"></script>
+  <script src="app.js?v=20260903_02"></script>
 </body>
 </html>

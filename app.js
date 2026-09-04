@@ -183,10 +183,13 @@ function seleccionarVendedorLogin(vendedor) {
 
 function cambiarVistaVendedor(vista) {
   state.vistaVendedor = vista;
+  if (vista !== "Consolidado") {
+    state.vendedorActual = vista;
+  }
   localStorage.setItem("inv_vista_vendedor", vista);
   actualizarUIVendedor();
-  renderizarInventario();
   renderizarDashboard();
+  renderizarInventario();
 }
 
 function actualizarUIVendedor() {
@@ -202,16 +205,19 @@ function actualizarUIVendedor() {
   const labelInv = document.getElementById("inventarioVendedorLabel");
   if (labelInv) labelInv.textContent = state.vistaVendedor === "Consolidado" ? "Consolidado (Total)" : `Vendedor ${state.vistaVendedor}`;
 
-  // Tabs styling
+  // Tabs styling for both Inventario and Dashboard tabs
   ["Carlos", "Daniel", "Consolidado"].forEach(v => {
-    const btn = document.getElementById(`tabVendedor-${v}`);
-    if (btn) {
-      if (state.vistaVendedor === v) {
-        btn.className = "py-2 rounded-xl bg-indigo-600 text-white shadow-md flex items-center justify-center gap-1 active:scale-95 transition-all";
-      } else {
-        btn.className = "py-2 rounded-xl bg-transparent text-slate-400 hover:text-white flex items-center justify-center gap-1 active:scale-95 transition-all";
+    const btnInv = document.getElementById(`tabVendedor-${v}`);
+    const btnDash = document.getElementById(`dashTabVendedor-${v}`);
+    [btnInv, btnDash].forEach(btn => {
+      if (btn) {
+        if (state.vistaVendedor === v) {
+          btn.className = "py-2 rounded-xl bg-indigo-600 text-white shadow-md flex items-center justify-center gap-1 active:scale-95 transition-all";
+        } else {
+          btn.className = "py-2 rounded-xl bg-transparent text-slate-400 hover:text-white flex items-center justify-center gap-1 active:scale-95 transition-all";
+        }
       }
-    }
+    });
   });
 }
 
@@ -264,6 +270,12 @@ function cargarEstadoLocal() {
   const ctas = localStorage.getItem("inv_cuentas_v2");
   if (ctas) {
     try { state.cuentas = JSON.parse(ctas); } catch(e) { state.cuentas = []; }
+  }
+
+  const savedVista = localStorage.getItem("inv_vista_vendedor");
+  if (savedVista) {
+    state.vistaVendedor = savedVista;
+    if (savedVista !== "Consolidado") state.vendedorActual = savedVista;
   }
 }
 
@@ -554,9 +566,18 @@ function aplicarConfiguracionUI() {
 // 1. DASHBOARD
 // ==========================================================================
 function renderizarDashboard() {
-  const stockMap = calcularStockPorCodigo("Consolidado");
-  const costMap = calcularCostosPorCodigo("Consolidado");
+  const vista = state.vistaVendedor || "Consolidado";
+  const stockMap = calcularStockPorCodigo(vista);
+  const costMap = calcularCostosPorCodigo(vista);
   const tc = parseNum(state.config.tipoCambio, 520) || 520;
+
+  // Actualizar subtítulo en el banner si existe
+  const bannerSub = document.getElementById("dashBannerSubtitle");
+  if (bannerSub) {
+    bannerSub.innerHTML = vista === "Consolidado"
+      ? `Control Ejecutivo • <span class="text-amber-300 font-bold">Consolidado Total</span> (Carlos & Daniel)`
+      : `Vista Individual • Vendedor <span class="${vista === 'Daniel' ? 'text-violet-400' : 'text-blue-400'} font-bold">${vista}</span>`;
+  }
 
   let costoUSD = 0, costoCRC = 0;
   let ventaUSD = 0, ventaCRC = 0;
@@ -618,10 +639,14 @@ function renderizarDashboard() {
   document.getElementById("dashTotalUnidades").textContent = fmtNum(totalUnidades);
   document.getElementById("dashProdsConStock").textContent = `${prodsConStock} de ${Object.keys(state.productos).length}`;
 
-  // --- Resumen de Cuentas Pendientes en Dashboard (Por Cobrar y Por Pagar) ---
+  // --- Resumen de Cuentas Pendientes en Dashboard (Por Cobrar y Por Pagar) filtradas por vista ---
   let totCobrarCRC = 0;
   let totPagarCRC = 0;
   (state.cuentas || []).forEach(cta => {
+    if (vista !== "Consolidado") {
+      const vendCta = String(cta.vendedor || cta.socio || cta.registradoPor || "Carlos").trim();
+      if (vendCta !== vista) return;
+    }
     const saldo = parseNum(cta.saldoPendienteCRC, 0);
     if ((cta.estado || "Pendiente") !== "Pagado" && saldo > 0) {
       if (cta.tipo === "Por Cobrar") {
@@ -637,15 +662,20 @@ function renderizarDashboard() {
   if (dashCobrarEl) dashCobrarEl.textContent = fmtCRC(totCobrarCRC);
   if (dashPagarEl) dashPagarEl.textContent = fmtCRC(totPagarCRC);
 
-  // --- Pedidos Pendientes de Clientes (Consolidado para Proveedor) ---
+  // --- Pedidos Pendientes de Clientes (filtrados por vista) ---
   renderizarConsolidadoPedidosDashboard();
 
-  // Últimas ventas
+  // Últimas ventas / movimientos filtrados por la vista activa
   const recentCont = document.getElementById("dashRecentSales");
-  if (state.ventas.length === 0) {
-    recentCont.innerHTML = `<div class="text-center py-5 text-slate-500 text-xs">No hay ventas registradas aún.</div>`;
+  let ventasFiltradas = state.ventas || [];
+  if (vista !== "Consolidado") {
+    ventasFiltradas = ventasFiltradas.filter(v => String(v.vendedor || "Carlos").trim() === vista);
+  }
+
+  if (ventasFiltradas.length === 0) {
+    recentCont.innerHTML = `<div class="text-center py-5 text-slate-500 text-xs">No hay ventas registradas aún para ${vista === "Consolidado" ? "la empresa" : vista}.</div>`;
   } else {
-    const ultimas = state.ventas.slice(0, 10);
+    const ultimas = ventasFiltradas.slice(0, 10);
     recentCont.innerHTML = ultimas.map((v, idx) => {
       const fecha = v.fecha ? new Date(v.fecha).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : "";
       const vend = v.vendedor || "Carlos";
@@ -657,6 +687,7 @@ function renderizarDashboard() {
       const vCod = v.codigo || (v.items && v.items[0] ? v.items[0].codigo : '') || '';
       const vUid = v.id ? `${v.id}_${vCod}_${idx}` : `VTA_ROW_${idx}`;
       const esPagoLuego = String(v.metodoPago || "").toLowerCase().includes("luego") || String(v.metodoPago || "").toLowerCase().includes("crédito");
+      const originalIdx = state.ventas.indexOf(v);
 
       // Buscar si existe una cuenta asociada a ESTE movimiento específico
       const cuentaAsociada = (state.cuentas || []).find(cta => 
@@ -705,7 +736,7 @@ function renderizarDashboard() {
             <div class="text-[10px] text-slate-400">${fmtUSD(totUSD)}</div>
             <div class="pt-0.5">
               ${!cuentaAsociada && !esPagoLuego ? `
-                <button onclick="pasarVentaIndividualACuentasPorCobrar(${idx})" title="Pasar a Cuentas por Cobrar" class="text-[9.5px] font-bold px-2 py-0.5 rounded bg-amber-950/60 hover:bg-amber-900 border border-amber-500/40 text-amber-300 active:scale-95 transition-all">
+                <button onclick="pasarVentaIndividualACuentasPorCobrar(${originalIdx !== -1 ? originalIdx : idx})" title="Pasar a Cuentas por Cobrar" class="text-[9.5px] font-bold px-2 py-0.5 rounded bg-amber-950/60 hover:bg-amber-900 border border-amber-500/40 text-amber-300 active:scale-95 transition-all">
                   + Cta Cobrar
                 </button>
               ` : (cuentaAsociada && cuentaAsociada.estado === "Pagado" ? `
@@ -733,7 +764,11 @@ function renderizarConsolidadoPedidosDashboard() {
   const pedidosList = document.getElementById("dashPedidosList");
   if (!container || !consolidadoLista || !pedidosList) return;
 
-  const pedidosPendientes = (state.pedidos || []).filter(p => p.estado === "pendiente" || !p.estado);
+  const vista = state.vistaVendedor || "Consolidado";
+  let pedidosPendientes = (state.pedidos || []).filter(p => p.estado === "pendiente" || !p.estado);
+  if (vista !== "Consolidado") {
+    pedidosPendientes = pedidosPendientes.filter(p => String(p.vendedor || "Carlos").trim() === vista);
+  }
 
   if (pedidosPendientes.length === 0) {
     badge.textContent = "0 pendientes";
