@@ -19,6 +19,14 @@ const fmtCRC = (n) =>
 const fmtNum = (n) => new Intl.NumberFormat("es-CR").format(Number.isFinite(n) ? n : 0);
 const todayStr = () => new Date().toISOString().slice(0, 10);
 const uid = () => Math.random().toString(36).slice(2, 10);
+const parseNum = (val, fallback = 0) => {
+  if (val === null || val === undefined) return fallback;
+  if (typeof val === "number") return isNaN(val) ? fallback : val;
+  const str = String(val).trim().replace(/[₡$]/g, "").trim();
+  const clean = str.replace(/,/g, "");
+  const num = parseFloat(clean);
+  return isNaN(num) ? fallback : num;
+};
 
 // --- Catálogo y Compras Iniciales (Vacíos por defecto - Carga 100% desde Google Sheets) ---
 const SEED_PRODUCTS = [];
@@ -296,7 +304,7 @@ function calcularStockDetalladoPorCodigo() {
   Object.values(state.productos).forEach(p => {
     const cod = String(p.codigo || "").trim().toUpperCase();
     if (!cod) return;
-    const init = Number(p.stockInicial || 0);
+    const init = parseNum(p.stockInicial !== undefined ? p.stockInicial : p.stock, 0);
     detalle[cod] = {
       Carlos: init,
       Daniel: 0,
@@ -306,33 +314,33 @@ function calcularStockDetalladoPorCodigo() {
 
   // 2. Sumar compras por vendedor
   state.compras.forEach(c => {
-    const cod = String(c.codigo || "").trim().toUpperCase();
-    if (!cod) return;
-    if (!detalle[cod]) detalle[cod] = { Carlos: 0, Daniel: 0, total: 0 };
+    const vend = String(c.vendedor || "Carlos").trim();
+    const codPrincipal = String(c.codigo || "").trim().toUpperCase();
     
     // Si la compra tiene items[] anidados
     if (c.items && Array.isArray(c.items) && c.items.length > 0) {
       c.items.forEach(ci => {
-        const ciCod = String(ci.codigo || cod).trim().toUpperCase();
+        const ciCod = String(ci.codigo || codPrincipal).trim().toUpperCase();
+        if (!ciCod) return;
         if (!detalle[ciCod]) detalle[ciCod] = { Carlos: 0, Daniel: 0, total: 0 };
-        const cant = Number(ci.cantidad || 0);
-        const vend = String(ci.vendedor || c.vendedor || "Carlos").trim();
-        if (vend === "Daniel") {
+        const cant = parseNum(ci.cantidad, 0);
+        const itemVend = String(ci.vendedor || vend).trim();
+        if (itemVend === "Daniel") {
           detalle[ciCod].Daniel += cant;
         } else {
           detalle[ciCod].Carlos += cant;
         }
         detalle[ciCod].total += cant;
       });
-    } else {
-      const cant = Number(c.cantidad || 0);
-      const vend = String(c.vendedor || "Carlos").trim();
+    } else if (codPrincipal) {
+      if (!detalle[codPrincipal]) detalle[codPrincipal] = { Carlos: 0, Daniel: 0, total: 0 };
+      const cant = parseNum(c.cantidad, 0);
       if (vend === "Daniel") {
-        detalle[cod].Daniel += cant;
+        detalle[codPrincipal].Daniel += cant;
       } else {
-        detalle[cod].Carlos += cant;
+        detalle[codPrincipal].Carlos += cant;
       }
-      detalle[cod].total += cant;
+      detalle[codPrincipal].total += cant;
     }
   });
 
@@ -352,7 +360,7 @@ function calcularStockDetalladoPorCodigo() {
       const cod = String(i.codigo || "").trim().toUpperCase();
       if (!cod) return;
       if (!detalle[cod]) detalle[cod] = { Carlos: 0, Daniel: 0, total: 0 };
-      const cant = Number(i.cantidad || 0);
+      const cant = parseNum(i.cantidad, 0);
       if (vend === "Daniel") {
         detalle[cod].Daniel -= cant;
       } else {
@@ -364,6 +372,7 @@ function calcularStockDetalladoPorCodigo() {
 
   return detalle;
 }
+
 function calcularStockPorCodigo(vista = state.vistaVendedor) {
   const det = calcularStockDetalladoPorCodigo();
   const mapa = {};
@@ -381,38 +390,73 @@ function calcularStockPorCodigo(vista = state.vistaVendedor) {
 
 function calcularCostosPorCodigo(vista = state.vistaVendedor) {
   const acc = {};
+  const tcConfig = parseNum(state.config.tipoCambio, 520) || 520;
+
   state.compras.forEach(p => {
     const vend = String(p.vendedor || "Carlos").trim();
     if (vista === "Carlos" && vend !== "Carlos") return;
     if (vista === "Daniel" && vend !== "Daniel") return;
 
-    const cant = Number(p.cantidad || 0);
-    const cu = Number(p.costoUnitarioUSD || 0);
-    const cc = Number(p.costoUnitarioCRC || (cu * (p.tipoCambio || state.config.tipoCambio)));
-    if (!acc[p.codigo]) acc[p.codigo] = { cant: 0, totalUSD: 0, totalCRC: 0 };
-    acc[p.codigo].cant += cant;
-    acc[p.codigo].totalUSD += cant * cu;
-    acc[p.codigo].totalCRC += cant * cc;
+    const itemsAProcesar = (p.items && Array.isArray(p.items) && p.items.length > 0)
+      ? p.items
+      : [{
+          codigo: p.codigo,
+          cantidad: p.cantidad,
+          costoUnitarioUSD: p.costoUnitarioUSD,
+          costoUnitarioCRC: p.costoUnitarioCRC,
+          tipoCambio: p.tipoCambio
+        }];
+
+    itemsAProcesar.forEach(item => {
+      const cod = String(item.codigo || "").trim().toUpperCase();
+      if (!cod) return;
+
+      const cant = parseNum(item.cantidad, 0);
+      if (cant <= 0) return;
+
+      const tc = parseNum(item.tipoCambio || p.tipoCambio || tcConfig, 520) || 520;
+      let cuUSD = parseNum(item.costoUnitarioUSD, 0);
+      let cuCRC = parseNum(item.costoUnitarioCRC, 0);
+
+      // Conversión bi-monetaria automática si falta una de las monedas
+      if (cuUSD === 0 && cuCRC > 0) cuUSD = cuCRC / tc;
+      if (cuCRC === 0 && cuUSD > 0) cuCRC = cuUSD * tc;
+
+      if (!acc[cod]) acc[cod] = { cant: 0, totalUSD: 0, totalCRC: 0 };
+      acc[cod].cant += cant;
+      acc[cod].totalUSD += cant * cuUSD;
+      acc[cod].totalCRC += cant * cuCRC;
+    });
   });
 
   const out = {};
   Object.keys(acc).forEach(c => {
+    const cUSD = acc[c].cant > 0 ? acc[c].totalUSD / acc[c].cant : 0;
+    const cCRC = acc[c].cant > 0 ? acc[c].totalCRC / acc[c].cant : 0;
     out[c] = {
-      usd: acc[c].cant > 0 ? acc[c].totalUSD / acc[c].cant : 0,
-      crc: acc[c].cant > 0 ? acc[c].totalCRC / acc[c].cant : 0,
+      usd: cUSD > 0 ? cUSD : (cCRC > 0 ? cCRC / tcConfig : 0),
+      crc: cCRC > 0 ? cCRC : (cUSD > 0 ? cUSD * tcConfig : 0),
       fuente: "compras"
     };
   });
 
   Object.values(state.productos).forEach(p => {
-    if (!out[p.codigo] && (Number(p.costoRefUSD) > 0 || Number(p.costoRefCRC) > 0)) {
-      out[p.codigo] = {
-        usd: Number(p.costoRefUSD) || 0,
-        crc: Number(p.costoRefCRC) || 0,
-        fuente: "referencia"
-      };
+    const cod = String(p.codigo || "").trim().toUpperCase();
+    if (!cod) return;
+    const refUSD = parseNum(p.costoRefUSD, 0);
+    const refCRC = parseNum(p.costoRefCRC, 0);
+
+    if (!out[cod] || (out[cod].usd === 0 && out[cod].crc === 0)) {
+      if (refUSD > 0 || refCRC > 0) {
+        out[cod] = {
+          usd: refUSD > 0 ? refUSD : (refCRC > 0 ? refCRC / tcConfig : 0),
+          crc: refCRC > 0 ? refCRC : (refUSD > 0 ? refUSD * tcConfig : 0),
+          fuente: "referencia"
+        };
+      }
     }
   });
+
   return out;
 }
 
@@ -510,8 +554,9 @@ function aplicarConfiguracionUI() {
 // 1. DASHBOARD
 // ==========================================================================
 function renderizarDashboard() {
-  const stockMap = calcularStockPorCodigo();
-  const costMap = calcularCostosPorCodigo();
+  const stockMap = calcularStockPorCodigo("Consolidado");
+  const costMap = calcularCostosPorCodigo("Consolidado");
+  const tc = parseNum(state.config.tipoCambio, 520) || 520;
 
   let costoUSD = 0, costoCRC = 0;
   let ventaUSD = 0, ventaCRC = 0;
@@ -520,15 +565,41 @@ function renderizarDashboard() {
   let sinExistencia = [];
 
   Object.values(state.productos).forEach(p => {
-    const st = stockMap[p.codigo] || 0;
+    const cod = String(p.codigo || "").trim().toUpperCase();
+    const st = parseNum(stockMap[cod] !== undefined ? stockMap[cod] : stockMap[p.codigo], 0);
+
     if (st > 0) {
       prodsConStock++;
       totalUnidades += st;
-      const c = costMap[p.codigo] || { usd: 0, crc: 0 };
-      costoUSD += st * c.usd;
-      costoCRC += st * c.crc;
-      ventaUSD += st * Number(p.precioVentaUSD || 0);
-      ventaCRC += st * Number(p.precioVentaCRC || 0);
+
+      // Costo unitario
+      const c = costMap[cod] || costMap[p.codigo] || { usd: 0, crc: 0 };
+      let cuUSD = parseNum(c.usd, 0);
+      let cuCRC = parseNum(c.crc, 0);
+
+      // Conversión automática bi-monetaria si falta una moneda
+      if (cuUSD === 0 && cuCRC > 0) cuUSD = cuCRC / tc;
+      if (cuCRC === 0 && cuUSD > 0) cuCRC = cuUSD * tc;
+
+      // Fallback a costos de referencia si compras dio 0
+      if (cuUSD === 0 && cuCRC === 0) {
+        const refUSD = parseNum(p.costoRefUSD, 0);
+        const refCRC = parseNum(p.costoRefCRC, 0);
+        cuUSD = refUSD > 0 ? refUSD : (refCRC > 0 ? refCRC / tc : 0);
+        cuCRC = refCRC > 0 ? refCRC : (refUSD > 0 ? refUSD * tc : 0);
+      }
+
+      costoUSD += st * cuUSD;
+      costoCRC += st * cuCRC;
+
+      // Precio venta unitario con conversión bi-moneda
+      let pvUSD = parseNum(p.precioVentaUSD, 0);
+      let pvCRC = parseNum(p.precioVentaCRC, 0);
+      if (pvUSD === 0 && pvCRC > 0) pvUSD = pvCRC / tc;
+      if (pvCRC === 0 && pvUSD > 0) pvCRC = pvUSD * tc;
+
+      ventaUSD += st * pvUSD;
+      ventaCRC += st * pvCRC;
     } else {
       sinExistencia.push(p);
     }
@@ -551,7 +622,7 @@ function renderizarDashboard() {
   let totCobrarCRC = 0;
   let totPagarCRC = 0;
   (state.cuentas || []).forEach(cta => {
-    const saldo = Number(cta.saldoPendienteCRC || 0);
+    const saldo = parseNum(cta.saldoPendienteCRC, 0);
     if ((cta.estado || "Pendiente") !== "Pagado" && saldo > 0) {
       if (cta.tipo === "Por Cobrar") {
         totCobrarCRC += saldo;
@@ -579,8 +650,10 @@ function renderizarDashboard() {
       const fecha = v.fecha ? new Date(v.fecha).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : "";
       const vend = v.vendedor || "Carlos";
       const vendColor = vend === "Daniel" ? "text-violet-400 bg-violet-950/60 border-violet-500/30" : "text-blue-400 bg-blue-950/60 border-blue-500/30";
-      const totCRC = Number(v.totalCRC || (v.totalFinalCRC || 0));
-      const totUSD = Number(v.totalUSD || 0);
+      const totCRC = parseNum(v.totalCRC !== undefined ? v.totalCRC : v.totalFinalCRC, 0);
+      const totUSD = parseNum(v.totalUSD, 0);
+      const envioCRC = parseNum(v.costoEnvioCRC, 0);
+      const envioUSD = parseNum(v.costoEnvioUSD, 0);
       const vCod = v.codigo || (v.items && v.items[0] ? v.items[0].codigo : '') || '';
       const vUid = v.id ? `${v.id}_${vCod}_${idx}` : `VTA_ROW_${idx}`;
       const esPagoLuego = String(v.metodoPago || "").toLowerCase().includes("luego") || String(v.metodoPago || "").toLowerCase().includes("crédito");
@@ -620,6 +693,12 @@ function renderizarDashboard() {
             <div class="text-[11px] text-slate-400 font-mono">
               ${fecha} • ${v.nombre ? `${v.nombre} (${v.cantidad || 1}x)` : `${v.items ? v.items.length : 1} prod(s)`} <span class="text-[10px] text-slate-500">(${v.metodoPago || "Efectivo"})</span>
             </div>
+            ${envioCRC > 0 ? `
+              <div class="text-[10px] text-amber-300 font-mono mt-1 bg-amber-950/60 border border-amber-500/40 rounded px-1.5 py-0.5 inline-flex items-center gap-1">
+                <span>🚚</span>
+                <span>En factura <b>${v.id || 'N/A'}</b> se pagó el monto de flete o envío: <b>${fmtCRC(envioCRC)}</b>${envioUSD > 0 ? ` (${fmtUSD(envioUSD)})` : ''}</span>
+              </div>
+            ` : ''}
           </div>
           <div class="text-right font-mono shrink-0 space-y-0.5">
             <div class="text-xs font-black text-emerald-400">${fmtCRC(totCRC)}</div>
@@ -3933,19 +4012,26 @@ function obtenerListaVentasConsolidadas() {
         metodoPago: v.metodoPago || "Efectivo",
         totalCRC: 0,
         totalUSD: 0,
+        costoEnvioCRC: 0,
+        costoEnvioUSD: 0,
         itemsSummary: []
       });
     }
 
     const sale = map.get(id);
+    const envCRC = parseNum(v.costoEnvioCRC, 0);
+    const envUSD = parseNum(v.costoEnvioUSD, 0);
+    if (envCRC > sale.costoEnvioCRC) sale.costoEnvioCRC = envCRC;
+    if (envUSD > sale.costoEnvioUSD) sale.costoEnvioUSD = envUSD;
+
     if (v.items && Array.isArray(v.items)) {
-      sale.totalCRC = Number(v.totalCRC) || 0;
-      sale.totalUSD = Number(v.totalUSD) || 0;
+      sale.totalCRC = parseNum(v.totalCRC !== undefined ? v.totalCRC : v.totalFinalCRC, 0);
+      sale.totalUSD = parseNum(v.totalUSD, 0);
       sale.itemsSummary = v.items.map(i => `${i.cantidad}x ${i.nombre || i.codigo}`);
     } else {
-      const cant = Number(v.cantidad) || 1;
-      const totCRC = Number(v.totalCRC) || (cant * (Number(v.precioCRC) || 0));
-      const totUSD = Number(v.totalUSD) || (cant * (Number(v.precioUSD) || 0));
+      const cant = parseNum(v.cantidad, 1);
+      const totCRC = parseNum(v.totalCRC, 0) || (cant * parseNum(v.precioCRC, 0));
+      const totUSD = parseNum(v.totalUSD, 0) || (cant * parseNum(v.precioUSD, 0));
       sale.totalCRC += totCRC;
       sale.totalUSD += totUSD;
       sale.itemsSummary.push(`${cant}x ${v.nombre || v.codigo}`);
@@ -3961,6 +4047,7 @@ function renderizarHistorialFinanzas() {
   if (!cont) return;
 
   const filtro = state.filtroFinanzas || "todos";
+  const tcActual = parseNum(state.config.tipoCambio, 520) || 520;
 
   // 1. Movimientos directos (Aportes, Pagos a socios, Gastos)
   const movsDirectos = (state.movimientosDinero || []).map(m => ({
@@ -3971,37 +4058,53 @@ function renderizarHistorialFinanzas() {
     socio: m.socio || "",
     cuentaOrigen: m.cuentaOrigen || "",
     cuentaDestino: m.cuentaDestino || "",
-    montoCRC: Number(m.montoCRC) || 0,
-    montoUSD: Number(m.montoUSD) || 0,
+    montoCRC: parseNum(m.montoCRC, 0),
+    montoUSD: parseNum(m.montoUSD, 0),
+    costoEnvioCRC: 0,
+    costoEnvioUSD: 0,
     metodoPago: m.metodoPago || "SINPE Móvil",
     notas: m.notas || "",
     registradoPor: m.registradoPor || m.socio || "Carlos"
   }));
 
-  // 2. Inyecciones de Dinero por Ventas del POS
-  const ventasConsolidadas = obtenerListaVentasConsolidadas().map(v => ({
-    origen: 'venta',
-    id: v.id,
-    fecha: v.fecha,
-    tipo: 'venta_pos',
-    socio: v.vendedor || "Carlos",
-    cuentaOrigen: `Venta POS (${v.vendedor || "Carlos"})`,
-    cuentaDestino: "Caja Empresa",
-    montoCRC: v.totalCRC,
-    montoUSD: v.totalUSD,
-    metodoPago: v.metodoPago || "Efectivo",
-    notas: `${v.itemsSummary.join(", ")}${v.cliente && v.cliente !== 'Cliente General' ? ` • Cl: ${v.cliente}` : ''}`,
-    registradoPor: v.vendedor || "Carlos"
-  }));
+  // 2. Inyecciones de Dinero por Ventas del POS (Neto a Caja = Total Venta - Flete/Envío)
+  const ventasConsolidadas = obtenerListaVentasConsolidadas().map(v => {
+    const envioCRC = parseNum(v.costoEnvioCRC, 0);
+    const envioUSD = parseNum(v.costoEnvioUSD, 0) || (tcActual > 0 ? envioCRC / tcActual : 0);
+    const montoNetoCRC = Math.max(0, v.totalCRC - envioCRC);
+    const montoNetoUSD = Math.max(0, v.totalUSD - envioUSD);
+
+    return {
+      origen: 'venta',
+      id: v.id,
+      fecha: v.fecha,
+      tipo: 'venta_pos',
+      socio: v.vendedor || "Carlos",
+      cuentaOrigen: `Venta POS (${v.vendedor || "Carlos"})`,
+      cuentaDestino: "Caja Empresa",
+      montoCRC: montoNetoCRC,
+      montoUSD: montoNetoUSD,
+      totalBrutoCRC: v.totalCRC,
+      totalBrutoUSD: v.totalUSD,
+      costoEnvioCRC: envioCRC,
+      costoEnvioUSD: envioUSD,
+      metodoPago: v.metodoPago || "Efectivo",
+      notas: `${v.itemsSummary.join(", ")}${v.cliente && v.cliente !== 'Cliente General' ? ` • Cl: ${v.cliente}` : ''}`,
+      registradoPor: v.vendedor || "Carlos"
+    };
+  });
 
   // 3. Egresos por Compras pagadas directamente con fondos de la Empresa
   const comprasEmpresa = (state.compras || [])
     .filter(c => (c.pagadoPor === "Empresa" || c.financiadoPor === "Empresa"))
     .map(c => {
-      const cant = Number(c.cantidad) || 1;
-      const tc = Number(c.tipoCambio) || (state.config.tipoCambio || 520);
-      const cUSD = cant * (Number(c.costoUnitarioUSD) || 0);
-      const cCRC = cant * (Number(c.costoUnitarioCRC) || (cUSD * tc));
+      const cant = parseNum(c.cantidad, 1);
+      const tc = parseNum(c.tipoCambio || state.config.tipoCambio, 520) || 520;
+      const envioCompCRC = parseNum(c.costoEnvioCRC, 0);
+      const envioCompUSD = parseNum(c.costoEnvioUSD, 0) || (tc > 0 ? envioCompCRC / tc : 0);
+      const cUSD = parseNum(c.totalUSD, 0) || (cant * parseNum(c.costoUnitarioUSD, 0) + envioCompUSD);
+      const cCRC = parseNum(c.totalCRC, 0) || (cant * parseNum(c.costoUnitarioCRC, cUSD * tc) + envioCompCRC);
+
       return {
         origen: 'compra_empresa',
         id: c.id,
@@ -4012,6 +4115,8 @@ function renderizarHistorialFinanzas() {
         cuentaDestino: c.proveedor || "Proveedor",
         montoCRC: cCRC,
         montoUSD: cUSD,
+        costoEnvioCRC: envioCompCRC,
+        costoEnvioUSD: envioCompUSD,
         metodoPago: "Caja Empresa",
         notas: `Compra ${cant}x ${c.nombre || c.codigo} (${c.proveedor || 'Proveedor'})`,
         registradoPor: c.vendedor || "Carlos"
@@ -4118,8 +4223,17 @@ function renderizarHistorialFinanzas() {
     }
 
     const fechaStr = m.fecha ? new Date(m.fecha).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : todayStr();
-    const montoCRC = Number(m.montoCRC) || 0;
-    const montoUSD = Number(m.montoUSD) || 0;
+    const montoCRC = parseNum(m.montoCRC, 0);
+    const montoUSD = parseNum(m.montoUSD, 0);
+    const envioCRC = parseNum(m.costoEnvioCRC, 0);
+    const envioUSD = parseNum(m.costoEnvioUSD, 0);
+
+    const fleteHtml = envioCRC > 0 ? `
+      <div class="text-[10px] text-amber-300 font-mono mt-1.5 bg-amber-950/60 border border-amber-500/40 rounded-lg px-2 py-0.5 inline-flex items-center gap-1.5">
+        <span>🚚</span>
+        <span>En ${isVenta ? 'factura' : 'compra'} <b>${m.id}</b> se pagó el monto de flete o envío: <b>${fmtCRC(envioCRC)}</b>${envioUSD > 0 ? ` (${fmtUSD(envioUSD)})` : ''}</span>
+      </div>
+    ` : '';
 
     const actionRight = (m.origen === 'movimiento') ? `
       <button onclick="eliminarMovimientoDinero('${m.id}')" title="Eliminar transacción" class="text-slate-500 hover:text-rose-400 p-1 transition-all">
@@ -4151,6 +4265,7 @@ function renderizarHistorialFinanzas() {
               <span>💳 ${m.metodoPago || 'Efectivo'}</span>
               ${m.notas ? `<span class="truncate">• 📝 ${m.notas}</span>` : ''}
             </div>
+            ${fleteHtml}
           </div>
           <div class="text-right font-mono shrink-0">
             <div class="text-sm font-black ${colorMonto}">${signoMonto}${fmtCRC(montoCRC)}</div>
@@ -4787,7 +4902,20 @@ async function _descargarDatosSheets(mostrarMensaje = false) {
         const mapa = {};
         if (Array.isArray(json.data.productos)) {
           json.data.productos.forEach(p => { 
-            if (p && p.codigo) mapa[p.codigo] = p; 
+            if (p && p.codigo) {
+              const cod = String(p.codigo).trim().toUpperCase();
+              p.codigo = cod;
+              p.nombre = String(p.nombre || cod).trim();
+              p.categoria = String(p.categoria || "General").trim();
+              p.costoRefUSD = parseNum(p.costoRefUSD, 0);
+              p.costoRefCRC = parseNum(p.costoRefCRC, 0);
+              p.precioVentaUSD = parseNum(p.precioVentaUSD, 0);
+              p.precioVentaCRC = parseNum(p.precioVentaCRC, 0);
+              p.stockInicial = parseNum(p.stockInicial !== undefined ? p.stockInicial : p.stock, 0);
+              p.stockMinimo = parseNum(p.stockMinimo, 2);
+              p.imagenUrl = String(p.imagenUrl || p.imagen || "").trim();
+              mapa[cod] = p;
+            }
           });
         }
         state.productos = mapa;
@@ -4796,19 +4924,56 @@ async function _descargarDatosSheets(mostrarMensaje = false) {
 
       // 2. Compras: Reflejar fielmente la hoja Compras de Sheets
       if (json.data.ultimasCompras !== undefined || json.data.compras !== undefined) {
-        state.compras = json.data.ultimasCompras || json.data.compras || [];
+        const rawComps = json.data.ultimasCompras || json.data.compras || [];
+        state.compras = Array.isArray(rawComps) ? rawComps.map(c => {
+          if (!c) return c;
+          return {
+            ...c,
+            codigo: String(c.codigo || "").trim().toUpperCase(),
+            cantidad: parseNum(c.cantidad, 1),
+            costoUnitarioUSD: parseNum(c.costoUnitarioUSD, 0),
+            costoUnitarioCRC: parseNum(c.costoUnitarioCRC, 0),
+            tipoCambio: parseNum(c.tipoCambio, state.config.tipoCambio || 520),
+            totalUSD: parseNum(c.totalUSD, 0),
+            totalCRC: parseNum(c.totalCRC, 0),
+            costoEnvioCRC: parseNum(c.costoEnvioCRC, 0),
+            costoEnvioUSD: parseNum(c.costoEnvioUSD, 0)
+          };
+        }) : [];
         guardarComprasLocal();
       }
 
       // 3. Ventas: Reflejar fielmente la hoja Ventas de Sheets
       if (json.data.ultimasVentas !== undefined || json.data.ventas !== undefined) {
-        state.ventas = json.data.ultimasVentas || json.data.ventas || [];
+        const rawVents = json.data.ultimasVentas || json.data.ventas || [];
+        state.ventas = Array.isArray(rawVents) ? rawVents.map(v => {
+          if (!v) return v;
+          return {
+            ...v,
+            codigo: String(v.codigo || "").trim().toUpperCase(),
+            cantidad: parseNum(v.cantidad, 1),
+            precioUSD: parseNum(v.precioUSD, 0),
+            precioCRC: parseNum(v.precioCRC, 0),
+            totalUSD: parseNum(v.totalUSD, 0),
+            totalCRC: parseNum(v.totalCRC, 0),
+            costoEnvioCRC: parseNum(v.costoEnvioCRC, 0),
+            costoEnvioUSD: parseNum(v.costoEnvioUSD, 0)
+          };
+        }) : [];
         guardarVentasLocal();
       }
 
       // 4. Finanzas: Reflejar fielmente la hoja Finanzas de Sheets
       if (json.data.finanzas !== undefined) {
-        state.movimientosDinero = Array.isArray(json.data.finanzas) ? json.data.finanzas : [];
+        const rawFin = Array.isArray(json.data.finanzas) ? json.data.finanzas : [];
+        state.movimientosDinero = rawFin.map(m => {
+          if (!m) return m;
+          return {
+            ...m,
+            montoCRC: parseNum(m.montoCRC, 0),
+            montoUSD: parseNum(m.montoUSD, 0)
+          };
+        });
         guardarFinanzasLocal();
       }
 
