@@ -2046,35 +2046,105 @@ function guardarNuevaCuentaManual() {
 
 // --- Editar precio de ítem en el carrito ---
 function editarPrecioCarrito(codigo) {
-  const item = state.carrito.find(i => i.codigo === codigo);
+  const codNorm = String(codigo).trim().toUpperCase();
+  const item = state.carrito.find(i => String(i.codigo).trim().toUpperCase() === codNorm);
   if (!item) return;
 
-  document.getElementById("editPrecioProductoNombre").textContent = item.nombre;
-  document.getElementById("editPrecioOriginal").textContent = fmtCRC(item.precioVentaCRC);
-  document.getElementById("editPrecioInput").value = item.precioVentaCRC;
-  document.getElementById("editPrecioCodigo").value = codigo;
+  const prod = state.productos[codNorm] || state.productos[item.codigo];
+  const precioCatalogo = prod ? Number(prod.precioVentaCRC || 0) : item.precioVentaCRC;
+  if (item.precioOriginalCRC === undefined) {
+    item.precioOriginalCRC = precioCatalogo;
+  }
+
+  const nombreEl = document.getElementById("editPrecioProductoNombre");
+  const origEl = document.getElementById("editPrecioOriginal");
+  const inputEl = document.getElementById("editPrecioInput");
+  const codEl = document.getElementById("editPrecioCodigo");
+
+  if (nombreEl) nombreEl.textContent = item.nombre;
+  if (origEl) origEl.textContent = fmtCRC(item.precioOriginalCRC);
+  if (inputEl) inputEl.value = item.precioVentaCRC;
+  if (codEl) codEl.value = item.codigo;
+
+  actualizarPreviewPrecioUSD();
 
   const modal = document.getElementById("modalEditarPrecio");
-  if (modal) { modal.classList.remove("hidden"); modal.classList.add("flex"); }
-  setTimeout(() => document.getElementById("editPrecioInput").focus(), 100);
+  if (modal) { 
+    modal.classList.remove("hidden"); 
+    modal.classList.add("flex"); 
+  }
+  setTimeout(() => {
+    if (inputEl) {
+      inputEl.focus();
+      inputEl.select();
+    }
+  }, 100);
+}
+
+function actualizarPreviewPrecioUSD() {
+  const inputEl = document.getElementById("editPrecioInput");
+  const equivEl = document.getElementById("editPrecioEquivUSD");
+  if (!inputEl || !equivEl) return;
+  const crc = parseNum(inputEl.value, 0);
+  const tc = Number(state.config.tipoCambio) || 520;
+  const usd = tc > 0 ? (crc / tc) : 0;
+  equivEl.textContent = crc > 0 ? `≈ ${fmtUSD(usd)} USD` : "";
+}
+
+function ajustarPrecioDescuento(pct) {
+  const codEl = document.getElementById("editPrecioCodigo");
+  const inputEl = document.getElementById("editPrecioInput");
+  if (!codEl || !inputEl) return;
+  const codNorm = String(codEl.value).trim().toUpperCase();
+  const item = state.carrito.find(i => String(i.codigo).trim().toUpperCase() === codNorm);
+  if (!item) return;
+
+  const base = item.precioOriginalCRC !== undefined ? item.precioOriginalCRC : item.precioVentaCRC;
+  const nuevo = Math.round(base * (1 - pct));
+  inputEl.value = nuevo;
+  actualizarPreviewPrecioUSD();
+}
+
+function restablecerPrecioOriginal() {
+  const codEl = document.getElementById("editPrecioCodigo");
+  const inputEl = document.getElementById("editPrecioInput");
+  if (!codEl || !inputEl) return;
+  const codNorm = String(codEl.value).trim().toUpperCase();
+  const item = state.carrito.find(i => String(i.codigo).trim().toUpperCase() === codNorm);
+  if (!item) return;
+
+  const base = item.precioOriginalCRC !== undefined ? item.precioOriginalCRC : item.precioVentaCRC;
+  inputEl.value = base;
+  actualizarPreviewPrecioUSD();
 }
 
 function aplicarNuevoPrecioCarrito() {
-  const codigo = document.getElementById("editPrecioCodigo").value;
-  const nuevoPrecio = parseFloat(document.getElementById("editPrecioInput").value) || 0;
-  if (nuevoPrecio < 0) { mostrarToast("El precio no puede ser negativo.", "error"); return; }
+  const codEl = document.getElementById("editPrecioCodigo");
+  const inputEl = document.getElementById("editPrecioInput");
+  if (!codEl || !inputEl) return;
 
-  const item = state.carrito.find(i => i.codigo === codigo);
+  const codigo = codEl.value;
+  const codNorm = String(codigo).trim().toUpperCase();
+  const nuevoPrecio = parseNum(inputEl.value, -1);
+
+  if (nuevoPrecio < 0) { 
+    mostrarToast("El precio no puede ser negativo.", "error"); 
+    return; 
+  }
+
+  const item = state.carrito.find(i => String(i.codigo).trim().toUpperCase() === codNorm);
   if (item) {
-    const tc = state.config.tipoCambio || 520;
+    const tc = Number(state.config.tipoCambio) || 520;
     item.precioVentaCRC = nuevoPrecio;
+    item.precioCRC = nuevoPrecio;
     item.precioVentaUSD = parseFloat((nuevoPrecio / tc).toFixed(2));
+    item.precioUSD = parseFloat((nuevoPrecio / tc).toFixed(2));
     item._precioEditado = true;
   }
 
   cerrarModalEditarPrecio();
   renderizarCarrito();
-  mostrarToast("Precio actualizado correctamente.", "success");
+  mostrarToast(`Precio actualizado: ${fmtCRC(nuevoPrecio)} ✅`, "success");
 }
 
 function cerrarModalEditarPrecio() {
@@ -3142,26 +3212,32 @@ function filtrarPosProductos() {
 }
 
 function agregarAlCarritoPorCodigo(codigo) {
-  const prod = state.productos[codigo];
+  const codNorm = String(codigo).trim().toUpperCase();
+  const prod = state.productos[codNorm] || state.productos[codigo];
   if (!prod) {
     mostrarToast("Producto no encontrado.", "error");
     return;
   }
 
   const stockMap = calcularStockPorCodigo();
-  const stockDisponible = stockMap[codigo] || 0;
+  const stockDisponible = stockMap[codNorm] !== undefined ? stockMap[codNorm] : (stockMap[codigo] || 0);
 
-  const enCarrito = state.carrito.find(item => item.codigo === codigo);
+  const enCarrito = state.carrito.find(item => String(item.codigo).trim().toUpperCase() === codNorm);
 
   if (enCarrito) {
     enCarrito.cantidad += 1;
   } else {
+    const pCRC = Number(prod.precioVentaCRC || 0);
+    const pUSD = Number(prod.precioVentaUSD || 0);
     state.carrito.push({
       codigo: prod.codigo,
       nombre: prod.nombre,
       imagenUrl: prod.imagenUrl || "",
-      precioVentaCRC: Number(prod.precioVentaCRC || 0),
-      precioVentaUSD: Number(prod.precioVentaUSD || 0),
+      precioVentaCRC: pCRC,
+      precioCRC: pCRC,
+      precioOriginalCRC: pCRC,
+      precioVentaUSD: pUSD,
+      precioUSD: pUSD,
       costoRefUSD: Number(prod.costoRefUSD || 0),
       costoRefCRC: Number(prod.costoRefCRC || 0),
       cantidad: 1,
@@ -3218,6 +3294,7 @@ function cambiarModoPOS(modo) {
   const panelPuntos = document.getElementById("panelPuntosCliente");
   const totalesYPagos = document.getElementById("posTotalesYPagosContainer");
   const bannerPedido = document.getElementById("posBannerModoPedido");
+  const cashHelper = document.getElementById("cashHelper");
 
   if (modo === "pedido") {
     if (btnVenta) {
@@ -3233,10 +3310,11 @@ function cambiarModoPOS(modo) {
     if (cartIcon) cartIcon.className = "w-4 h-4 text-amber-400";
     if (cartTitle) cartTitle.innerHTML = `Lista de Encargo (<span id="cartCount">${state.carrito.length}</span>)`;
     
-    // Ocultar montos, métodos de pago y puntos
+    // Ocultar montos, métodos de pago, vuelto y puntos
     if (totalesYPagos) totalesYPagos.classList.add("hidden");
     if (panelPuntos) panelPuntos.classList.add("hidden");
     if (bannerPedido) bannerPedido.classList.remove("hidden");
+    if (cashHelper) cashHelper.classList.add("hidden");
 
     mostrarToast("Modo 'Encargo / Pedido' (solo cantidades) 📋", "info");
   } else {
@@ -3257,6 +3335,7 @@ function cambiarModoPOS(modo) {
     if (totalesYPagos) totalesYPagos.classList.remove("hidden");
     if (bannerPedido) bannerPedido.classList.add("hidden");
     if (state.clienteSeleccionado && panelPuntos) panelPuntos.classList.remove("hidden");
+    if (state.metodoPagoSeleccionado === "Efectivo" && cashHelper) cashHelper.classList.remove("hidden");
 
     mostrarToast("Modo 'Venta Directa' activado 🛍️", "info");
   }
@@ -3417,51 +3496,6 @@ function calcularCambio() {
   }
 }
 
-function cambiarModoPOS(modo) {
-  state.modoPOS = modo;
-  const btnVenta = document.getElementById("btnModoVenta");
-  const btnPedido = document.getElementById("btnModoPedido");
-  const btnCheckout = document.getElementById("btnCheckout");
-  const cartIcon = document.getElementById("cartHeaderIcon");
-  const cartTitle = document.getElementById("cartHeaderTitle");
-  const cashHelper = document.getElementById("cashHelper");
-
-  if (modo === "pedido") {
-    if (btnVenta) {
-      btnVenta.className = "py-2 rounded-lg bg-transparent text-slate-400 hover:text-white flex items-center justify-center gap-1.5 active:scale-95 transition-all";
-    }
-    if (btnPedido) {
-      btnPedido.className = "py-2 rounded-lg bg-amber-600 text-white shadow-md flex items-center justify-center gap-1.5 active:scale-95 transition-all";
-    }
-    if (btnCheckout) {
-      btnCheckout.className = "w-full py-3.5 bg-gradient-to-r from-amber-500 to-orange-600 text-white text-sm font-extrabold rounded-xl shadow-lg shadow-amber-500/25 active:scale-95 transition-all flex items-center justify-center gap-2";
-      btnCheckout.innerHTML = `<i data-lucide="clipboard-check" class="w-5 h-5"></i><span>GUARDAR PEDIDO / ENCARGO</span>`;
-    }
-    if (cartIcon) cartIcon.className = "w-4 h-4 text-amber-400";
-    if (cartTitle) cartTitle.innerHTML = `Lista de Encargo (<span id="cartCount">${state.carrito.length}</span>)`;
-    if (cashHelper) cashHelper.classList.add("hidden");
-    mostrarToast("Modo 'Encargo / Pedido' activado 📋", "info");
-  } else {
-    if (btnVenta) {
-      btnVenta.className = "py-2 rounded-lg bg-emerald-600 text-white shadow-md flex items-center justify-center gap-1.5 active:scale-95 transition-all";
-    }
-    if (btnPedido) {
-      btnPedido.className = "py-2 rounded-lg bg-transparent text-slate-400 hover:text-white flex items-center justify-center gap-1.5 active:scale-95 transition-all";
-    }
-    if (btnCheckout) {
-      btnCheckout.className = "w-full py-3.5 bg-gradient-to-r from-emerald-500 to-teal-600 text-white text-sm font-extrabold rounded-xl shadow-lg shadow-emerald-500/25 active:scale-95 transition-all flex items-center justify-center gap-2";
-      btnCheckout.innerHTML = `<i data-lucide="check" class="w-5 h-5"></i><span>COMPLETAR VENTA</span>`;
-    }
-    if (cartIcon) cartIcon.className = "w-4 h-4 text-emerald-400";
-    if (cartTitle) cartTitle.innerHTML = `Carrito de Venta (<span id="cartCount">${state.carrito.length}</span>)`;
-    if (state.metodoPagoSeleccionado === "Efectivo" && cashHelper) cashHelper.classList.remove("hidden");
-    mostrarToast("Modo 'Venta Directa' activado 🛍️", "info");
-  }
-
-  inicializarIconos();
-  renderizarCarrito();
-}
-
 async function completarVenta() {
   if (state.modoPOS === "pedido") {
     return guardarPedidoCliente();
@@ -3526,7 +3560,29 @@ async function completarVenta() {
     id: idVenta,
     fecha: new Date().toISOString(),
     vendedor,
-    items: [...state.carrito],
+    items: state.carrito.map(it => {
+      const pCRC = Number(it.precioVentaCRC !== undefined ? it.precioVentaCRC : (it.precioCRC || 0));
+      const pUSD = Number(it.precioVentaUSD !== undefined ? it.precioVentaUSD : (it.precioUSD || 0));
+      const cant = Number(it.cantidad || 1);
+      return {
+        codigo: it.codigo,
+        nombre: it.nombre || it.codigo,
+        imagenUrl: it.imagenUrl || "",
+        cantidad: cant,
+        precioVentaCRC: pCRC,
+        precioCRC: pCRC,
+        precioUnitarioCRC: pCRC,
+        precioVentaUSD: pUSD,
+        precioUSD: pUSD,
+        precioUnitarioUSD: pUSD,
+        costoRefCRC: Number(it.costoRefCRC || 0),
+        costoRefUSD: Number(it.costoRefUSD || 0),
+        subtotalCRC: cant * pCRC,
+        subtotalUSD: cant * pUSD,
+        _precioEditado: !!it._precioEditado,
+        precioOriginalCRC: it.precioOriginalCRC !== undefined ? it.precioOriginalCRC : pCRC
+      };
+    }),
     totalCRC: totalBrutoCRC,
     totalFinalCRC,
     totalUSD,
@@ -4983,12 +5039,16 @@ async function _descargarDatosSheets(mostrarMensaje = false) {
         const rawVents = json.data.ultimasVentas || json.data.ventas || [];
         state.ventas = Array.isArray(rawVents) ? rawVents.map(v => {
           if (!v) return v;
+          const pUSD = parseNum(v.precioUSD !== undefined ? v.precioUSD : v.precioVentaUSD, 0);
+          const pCRC = parseNum(v.precioCRC !== undefined ? v.precioCRC : v.precioVentaCRC, 0);
           return {
             ...v,
             codigo: String(v.codigo || "").trim().toUpperCase(),
             cantidad: parseNum(v.cantidad, 1),
-            precioUSD: parseNum(v.precioUSD, 0),
-            precioCRC: parseNum(v.precioCRC, 0),
+            precioUSD: pUSD,
+            precioVentaUSD: pUSD,
+            precioCRC: pCRC,
+            precioVentaCRC: pCRC,
             totalUSD: parseNum(v.totalUSD, 0),
             totalCRC: parseNum(v.totalCRC, 0),
             costoEnvioCRC: parseNum(v.costoEnvioCRC, 0),
