@@ -1,4 +1,4 @@
-const CACHE_NAME = 'inventory-sheets-v43';
+const CACHE_NAME = 'inventory-sheets-v46';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -13,6 +13,14 @@ const ASSETS_TO_CACHE = [
   'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
   'https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js'
 ];
+
+// Assets que SIEMPRE deben ir a la red primero (nunca servir versión vieja cacheada)
+const NETWORK_FIRST_PATTERNS = [
+  /app\.js/,
+  /index\.html/,
+  /styles\.css/,
+];
+
 
 // 1. Install: Precache all essential offline assets
 self.addEventListener('install', (event) => {
@@ -45,7 +53,7 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// 3. Fetch: Cache-First for static assets, Network-First fallback
+// 3. Fetch: Network-First para JS/HTML/CSS críticos, Cache-First para el resto
 self.addEventListener('fetch', (event) => {
   const url = event.request.url;
 
@@ -60,6 +68,30 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Network-First para app.js, index.html, styles.css (siempre la versión más reciente)
+  const isNetworkFirst = NETWORK_FIRST_PATTERNS.some((pattern) => pattern.test(url));
+
+  if (isNetworkFirst) {
+    event.respondWith(
+      fetch(event.request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const responseClone = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, responseClone);
+            });
+          }
+          return networkResponse;
+        })
+        .catch(() => {
+          // Sin red: servir desde caché como fallback
+          return caches.match(event.request).then(cached => cached || caches.match('./index.html'));
+        })
+    );
+    return;
+  }
+
+  // Cache-First para el resto (CDNs, imágenes, etc.)
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       const fetchPromise = fetch(event.request)

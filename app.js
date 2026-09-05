@@ -650,7 +650,9 @@ function renderizarDashboard() {
     const saldo = parseNum(cta.saldoPendienteCRC, 0);
     if ((cta.estado || "Pendiente") !== "Pagado" && saldo > 0) {
       if (cta.tipo === "Por Cobrar") {
-        totCobrarCRC += saldo;
+        // Usar valor neto real (venta - envío) para el dashboard interno
+        const datosEnv = obtenerDatosEnvioCuenta(cta);
+        totCobrarCRC += datosEnv.valorNetoCRC;
       } else {
         totPagarCRC += saldo;
       }
@@ -1583,6 +1585,124 @@ function filtrarTipoCuenta(tipo) {
   renderizarCuentas();
 }
 
+// --- Cálculo de Datos de Envío y Desglose de Cuentas por Cobrar ---
+function obtenerDatosEnvioCuenta(cta) {
+  if (!cta) return { 
+    costoEnvioCRC: 0, costoEnvioUSD: 0, 
+    envioPendienteCRC: 0, envioPendienteUSD: 0, 
+    valorClienteCRC: 0, valorClienteUSD: 0, 
+    valorNetoCRC: 0, valorNetoUSD: 0, 
+    tieneEnvio: false 
+  };
+
+  const tc = Number(state.config.tipoCambio || 520);
+  let costoEnvioCRC = parseNum(cta.costoEnvioCRC, 0);
+
+  // Si no está explícito en la cuenta, buscar la venta asociada en state.ventas
+  if (costoEnvioCRC === 0 && cta.tipo === "Por Cobrar") {
+    let vId = cta.ventaId;
+    if (!vId && cta.referenciaId) {
+      const match = cta.referenciaId.match(/VTA-[A-Za-z0-9-]+/i);
+      if (match) vId = match[0];
+    }
+    if (!vId && cta.notas) {
+      const match = cta.notas.match(/VTA-[A-Za-z0-9-]+/i);
+      if (match) vId = match[0];
+    }
+
+    if (vId) {
+      const ventasAsoc = (state.ventas || []).filter(v => v.id === vId);
+      if (ventasAsoc.length > 0) {
+        let envioTotalVenta = parseNum(ventasAsoc[0].costoEnvioCRC || ventasAsoc[0].envioCRC, 0);
+        if (envioTotalVenta === 0 && ventasAsoc[0].notas) {
+          const matchVentaNota = ventasAsoc[0].notas.match(/env[íi]o:\s*₡?\s*(\d+)/i) || ventasAsoc[0].notas.match(/flete:\s*₡?\s*(\d+)/i);
+          if (matchVentaNota && matchVentaNota[1]) envioTotalVenta = parseNum(matchVentaNota[1], 0);
+        }
+        if (envioTotalVenta > 0) {
+          const cuentasMismaVenta = (state.cuentas || []).filter(c => 
+            c.tipo === "Por Cobrar" && (c.ventaId === vId || (c.referenciaId && c.referenciaId.includes(vId)) || (c.notas && c.notas.includes(vId)))
+          );
+          const totalMontoCuentas = cuentasMismaVenta.reduce((acc, c) => acc + parseNum(c.montoTotalCRC, 0), 0);
+          if (totalMontoCuentas > 0 && cuentasMismaVenta.length > 1) {
+            costoEnvioCRC = Math.round(envioTotalVenta * (parseNum(cta.montoTotalCRC, 0) / totalMontoCuentas));
+          } else {
+            costoEnvioCRC = envioTotalVenta;
+          }
+        }
+      }
+    }
+  }
+
+  // Si aún es 0, extraer de notas si fue registrado previamente como [Envío: ₡...]
+  if (costoEnvioCRC === 0 && cta.notas) {
+    const matchEnvio = cta.notas.match(/env[íi]o:\s*₡?\s*(\d+)/i) || cta.notas.match(/flete:\s*₡?\s*(\d+)/i);
+    if (matchEnvio && matchEnvio[1]) {
+      costoEnvioCRC = parseNum(matchEnvio[1], 0);
+    }
+  }
+
+  const costoEnvioUSD = tc > 0 ? (costoEnvioCRC / tc) : 0;
+  const saldoPendienteBrutoCRC = parseNum(cta.saldoPendienteCRC !== undefined ? cta.saldoPendienteCRC : cta.montoTotalCRC, 0);
+  const totalBrutoCRC = parseNum(cta.montoTotalCRC || saldoPendienteBrutoCRC, 0);
+
+  const ratioPendiente = totalBrutoCRC > 0 ? (saldoPendienteBrutoCRC / totalBrutoCRC) : 1;
+  const envioPendienteCRC = Math.round(costoEnvioCRC * ratioPendiente);
+  const envioPendienteUSD = tc > 0 ? (envioPendienteCRC / tc) : 0;
+
+  // 1. Reporte para el Cliente (WhatsApp): Monto de venta completo sin descontar envío
+  const valorClienteCRC = saldoPendienteBrutoCRC;
+  const valorClienteUSD = tc > 0 ? (valorClienteCRC / tc) : 0;
+
+  // 2. Para nosotros en el sistema: Valor real neto (venta - envío)
+  const valorNetoCRC = Math.max(0, saldoPendienteBrutoCRC - envioPendienteCRC);
+  const valorNetoUSD = tc > 0 ? (valorNetoCRC / tc) : 0;
+
+  return {
+    costoEnvioCRC,
+    costoEnvioUSD,
+    envioPendienteCRC,
+    envioPendienteUSD,
+    valorClienteCRC,
+    valorClienteUSD,
+    valorNetoCRC,
+    valorNetoUSD,
+    tieneEnvio: costoEnvioCRC > 0
+  };
+}
+
+function editarEnvioCuenta(idCuenta) {
+  const cta = state.cuentas.find(c => c.id === idCuenta);
+  if (!cta) return;
+
+  const datosEnv = obtenerDatosEnvioCuenta(cta);
+  const actual = datosEnv.costoEnvioCRC || 0;
+  const input = prompt(`Ingresa el monto de flete/envío de esta venta para ${cta.entidad} (₡ Colones):\n(Se descontará para obtener el valor neto real del sistema)`, actual);
+  if (input === null) return;
+
+  const nuevoEnvio = parseNum(input, 0);
+  if (nuevoEnvio < 0) {
+    mostrarToast("El envío no puede ser negativo", "error");
+    return;
+  }
+
+  const tc = Number(state.config.tipoCambio || 520);
+  cta.costoEnvioCRC = nuevoEnvio;
+  cta.costoEnvioUSD = tc > 0 ? (nuevoEnvio / tc) : 0;
+
+  let notasLimpias = (cta.notas || "").replace(/\s*\[Envío:.*?\]/gi, "").replace(/\s*\[Flete:.*?\]/gi, "");
+  if (nuevoEnvio > 0) {
+    notasLimpias += ` [Envío: ₡${nuevoEnvio}]`;
+  }
+  cta.notas = notasLimpias;
+
+  guardarCuentasLocal();
+  encolarAccionSincronizacion("actualizarCuenta", { cuenta: cta });
+  renderizarCuentas();
+  renderizarFinanzas();
+  renderizarDashboard();
+  mostrarToast(`Flete/Envío de ${fmtCRC(nuevoEnvio)} configurado para ${cta.entidad} 🚚`, "success");
+}
+
 function renderizarCuentas() {
   const cont = document.getElementById("listaCuentasPendientes");
   if (!cont) return;
@@ -1590,21 +1710,26 @@ function renderizarCuentas() {
   const q = (state.filtroCuentas || "").toLowerCase().trim();
   const filtroTipo = state.filtroTipoCuenta || "Por Cobrar";
 
-  // Calcular métricas generales
-  let totCobrarCRC = 0, totCobrarUSD = 0, countCobrar = 0;
+  // Calcular métricas generales (con valor neto real venta - envío para nosotros)
+  let totCobrarNetoCRC = 0, totCobrarNetoUSD = 0, countCobrar = 0;
+  let totCobrarBrutoClienteCRC = 0, totalEnvioEnCxcCRC = 0;
   let totPagarCRC = 0, totPagarUSD = 0, countPagar = 0;
 
   state.cuentas.forEach(cta => {
-    const saldoCRC = Number(cta.saldoPendienteCRC !== undefined ? cta.saldoPendienteCRC : cta.montoTotalCRC);
-    const saldoUSD = Number(cta.saldoPendienteUSD !== undefined ? cta.saldoPendienteUSD : cta.montoTotalUSD);
     const estado = cta.estado || "Pendiente";
+    const esPagado = estado === "Pagado" || (Number(cta.saldoPendienteCRC || 0) <= 0);
 
-    if (estado !== "Pagado" && saldoCRC > 0) {
+    if (!esPagado) {
       if (cta.tipo === "Por Cobrar") {
-        totCobrarCRC += saldoCRC;
-        totCobrarUSD += saldoUSD;
+        const datosEnv = obtenerDatosEnvioCuenta(cta);
+        totCobrarNetoCRC += datosEnv.valorNetoCRC; // Valor real para el sistema (venta - envio)
+        totCobrarNetoUSD += datosEnv.valorNetoUSD;
+        totCobrarBrutoClienteCRC += datosEnv.valorClienteCRC;
+        totalEnvioEnCxcCRC += datosEnv.envioPendienteCRC;
         countCobrar++;
       } else {
+        const saldoCRC = Number(cta.saldoPendienteCRC !== undefined ? cta.saldoPendienteCRC : cta.montoTotalCRC);
+        const saldoUSD = Number(cta.saldoPendienteUSD !== undefined ? cta.saldoPendienteUSD : cta.montoTotalUSD);
         totPagarCRC += saldoCRC;
         totPagarUSD += saldoUSD;
         countPagar++;
@@ -1616,8 +1741,14 @@ function renderizarCuentas() {
   const elCobrarCRC = document.getElementById("cuentasTotalCobrarCRC");
   const elCobrarUSD = document.getElementById("cuentasTotalCobrarUSD");
   const elBadgeCobrar = document.getElementById("badgeCuentasCobrar");
-  if (elCobrarCRC) elCobrarCRC.textContent = fmtCRC(totCobrarCRC);
-  if (elCobrarUSD) elCobrarUSD.textContent = fmtUSD(totCobrarUSD);
+  if (elCobrarCRC) elCobrarCRC.textContent = fmtCRC(totCobrarNetoCRC);
+  if (elCobrarUSD) {
+    if (totalEnvioEnCxcCRC > 0) {
+      elCobrarUSD.innerHTML = `<span>${fmtUSD(totCobrarNetoUSD)}</span><span class="block text-[9px] text-slate-400 font-normal">Bruto: ${fmtCRC(totCobrarBrutoClienteCRC)} | Envío: -${fmtCRC(totalEnvioEnCxcCRC)}</span>`;
+    } else {
+      elCobrarUSD.textContent = fmtUSD(totCobrarNetoUSD);
+    }
+  }
   if (elBadgeCobrar) elBadgeCobrar.textContent = countCobrar;
 
   const elPagarCRC = document.getElementById("cuentasTotalPagarCRC");
@@ -1633,7 +1764,7 @@ function renderizarCuentas() {
   // Actualizar widget en Dashboard
   const dashCobrar = document.getElementById("dashCobrarCRC");
   const dashPagar = document.getElementById("dashPagarCRC");
-  if (dashCobrar) dashCobrar.textContent = fmtCRC(totCobrarCRC);
+  if (dashCobrar) dashCobrar.textContent = fmtCRC(totCobrarNetoCRC);
   if (dashPagar) dashPagar.textContent = fmtCRC(totPagarCRC);
 
   // Filtrar lista para mostrar según la pestaña seleccionada
@@ -1706,6 +1837,7 @@ function renderizarCuentas() {
     const iconTipo = esCobrar ? "arrow-down-left" : "arrow-up-right";
     const iconColor = esCobrar ? "text-emerald-400 bg-emerald-950/60" : "text-rose-400 bg-rose-950/60";
 
+    const datosEnv = obtenerDatosEnvioCuenta(cta);
     const saldoCRC = Number(cta.saldoPendienteCRC !== undefined ? cta.saldoPendienteCRC : cta.montoTotalCRC);
     const saldoUSD = Number(cta.saldoPendienteUSD !== undefined ? cta.saldoPendienteUSD : cta.montoTotalUSD);
     const totalCRC = Number(cta.montoTotalCRC || 0);
@@ -1716,7 +1848,7 @@ function renderizarCuentas() {
       <div class="bg-gradient-to-br from-slate-900 via-slate-900/95 to-slate-950 border ${esPagado ? 'border-slate-800 opacity-70' : 'border-slate-700/90'} rounded-2xl p-3.5 shadow-lg space-y-2.5 transition-all">
         <!-- Top row: Type badge, status, date -->
         <div class="flex items-center justify-between gap-2">
-          <div class="flex items-center gap-1.5 min-w-0">
+          <div class="flex items-center gap-1.5 min-w-0 flex-wrap">
             <span class="p-1 rounded-lg ${iconColor} flex items-center justify-center">
               <i data-lucide="${iconTipo}" class="w-3.5 h-3.5"></i>
             </span>
@@ -1724,6 +1856,11 @@ function renderizarCuentas() {
               ${cta.tipo}
             </span>
             <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700 font-mono">${estadoTexto}</span>
+            ${datosEnv.tieneEnvio && esCobrar && !esPagado ? `
+              <span class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-950/80 border border-amber-500/40 text-amber-300 flex items-center gap-1">
+                🚚 Envío: -${fmtCRC(datosEnv.costoEnvioCRC)}
+              </span>
+            ` : ''}
           </div>
           <span class="text-[10px] text-slate-500 font-mono shrink-0">${fechaStr}</span>
         </div>
@@ -1736,16 +1873,32 @@ function renderizarCuentas() {
               ${cta.telefono ? `<span>📞 ${cta.telefono}</span>` : ''}
               ${cta.referenciaId ? `<span>Ref: <b class="text-indigo-300">${cta.referenciaId}</b></span>` : ''}
               ${cta.vendedor ? `<span>Vend: <b>${cta.vendedor}</b></span>` : ''}
+              ${esCobrar && !esPagado ? `
+                <button type="button" onclick="editarEnvioCuenta('${cta.id}')" class="px-1.5 py-0.2 rounded border text-[9px] font-semibold flex items-center gap-0.5 ${datosEnv.tieneEnvio ? 'bg-amber-950/40 border-amber-500/30 text-amber-300 hover:bg-amber-900/60' : 'bg-slate-800/80 border-slate-700 text-slate-400 hover:text-white'}" title="Ajustar monto de envío o flete de esta venta">
+                  <span>🚚 ${datosEnv.tieneEnvio ? `Envío: -${fmtCRC(datosEnv.costoEnvioCRC)}` : '+ Flete/Envío'}</span>
+                </button>
+              ` : ''}
             </div>
             ${cta.notas ? `<div class="text-[10px] text-slate-400 italic mt-1 bg-slate-950/60 p-1.5 rounded-lg border border-slate-800/80">${cta.notas}</div>` : ''}
           </div>
 
           <!-- Balance Amounts -->
           <div class="text-right font-mono shrink-0">
-            <div class="text-[10px] text-slate-400">Saldo Pendiente:</div>
-            <div class="text-sm font-black ${esPagado ? 'text-slate-400 line-through' : (esCobrar ? 'text-emerald-400' : 'text-rose-400')}">${fmtCRC(saldoCRC)}</div>
-            <div class="text-[10px] text-slate-400">${fmtUSD(saldoUSD)}</div>
-            ${totalCRC > saldoCRC ? `<div class="text-[9px] text-slate-500">Total orig: ${fmtCRC(totalCRC)}</div>` : ''}
+            <div class="text-[10px] ${datosEnv.tieneEnvio && esCobrar && !esPagado ? 'text-emerald-400 font-bold' : 'text-slate-400'}">
+              ${datosEnv.tieneEnvio && esCobrar && !esPagado ? 'Neto Real Sistema:' : 'Saldo Pendiente:'}
+            </div>
+            <div class="text-sm font-black ${esPagado ? 'text-slate-400 line-through' : (esCobrar ? 'text-emerald-400' : 'text-rose-400')}">
+              ${fmtCRC(datosEnv.tieneEnvio && esCobrar && !esPagado ? datosEnv.valorNetoCRC : saldoCRC)}
+            </div>
+            <div class="text-[10px] text-slate-400">
+              ${fmtUSD(datosEnv.tieneEnvio && esCobrar && !esPagado ? datosEnv.valorNetoUSD : saldoUSD)}
+            </div>
+            ${datosEnv.tieneEnvio && esCobrar && !esPagado ? `
+              <div class="text-[9px] text-slate-400 mt-0.5">
+                <span>Venta: <b>${fmtCRC(datosEnv.valorClienteCRC)}</b></span><br>
+                <span class="text-rose-400">Envío: <b>-${fmtCRC(datosEnv.envioPendienteCRC)}</b></span>
+              </div>
+            ` : (totalCRC > saldoCRC ? `<div class="text-[9px] text-slate-500">Total orig: ${fmtCRC(totalCRC)}</div>` : '')}
           </div>
         </div>
 
@@ -1753,10 +1906,11 @@ function renderizarCuentas() {
         <div class="flex items-center justify-between pt-2 border-t border-slate-800/80 gap-2">
           <div class="flex items-center gap-1.5">
             ${cta.telefono ? `
-              <a href="https://wa.me/506${cta.telefono.replace(/[^0-9]/g, '')}?text=Hola%20${encodeURIComponent(cta.entidad)},%20te%20saludamos%20de%20DC%20El%20Destape.%20Te%20recordamos%20el%20saldo%20pendiente%20de%20${encodeURIComponent(fmtCRC(saldoCRC))}.%20¡Pura%20vida!" target="_blank"
-                class="px-2 py-1 bg-emerald-950/60 hover:bg-emerald-900 border border-emerald-500/30 text-emerald-400 rounded-lg text-[10px] font-bold flex items-center gap-1 active:scale-95">
+              <a href="https://wa.me/506${cta.telefono.replace(/[^0-9]/g, '')}?text=Hola%20${encodeURIComponent(cta.entidad)},%20te%20saludamos%20de%20DC%20El%20Destape.%20Te%20recordamos%20el%20saldo%20pendiente%20de%20${encodeURIComponent(fmtCRC(datosEnv.valorClienteCRC))}.%20¡Pura%20vida!" target="_blank"
+                class="px-2 py-1 bg-emerald-950/60 hover:bg-emerald-900 border border-emerald-500/30 text-emerald-400 rounded-lg text-[10px] font-bold flex items-center gap-1 active:scale-95"
+                title="Enviar reporte al cliente por WhatsApp (monto de venta sin descontar envío)">
                 <i data-lucide="message-circle" class="w-3 h-3"></i>
-                <span>WhatsApp</span>
+                <span>WhatsApp (${fmtCRC(datosEnv.valorClienteCRC)})</span>
               </a>
             ` : ''}
             <button onclick="eliminarCuenta('${cta.id}')" class="px-2 py-1 bg-slate-800 hover:bg-rose-950/60 text-slate-400 hover:text-rose-300 rounded-lg text-[10px] active:scale-95 transition-all">
@@ -1770,7 +1924,7 @@ function renderizarCuentas() {
                 <i data-lucide="plus" class="w-3.5 h-3.5"></i>
                 <span>Abonar</span>
               </button>
-              <button onclick="liquidarCuentaDirecto('${cta.id}')" class="px-2.5 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/40 border border-emerald-500/40 text-emerald-300 rounded-xl text-xs font-bold flex items-center gap-1 active:scale-95">
+              <button onclick="liquidarCuentaDirecto('${cta.id}')" class="px-2.5 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/40 border border-emerald-500/40 text-emerald-300 rounded-xl text-xs font-bold flex items-center gap-1 active:scale-95" title="${datosEnv.tieneEnvio ? `Liquidar neto: ${fmtCRC(datosEnv.valorNetoCRC)} (Venta: ${fmtCRC(datosEnv.valorClienteCRC)} - Envío: ${fmtCRC(datosEnv.envioPendienteCRC)})` : 'Liquidar cuenta completa'}">
                 <i data-lucide="check" class="w-3.5 h-3.5"></i>
                 <span>Liquidar</span>
               </button>
@@ -1793,14 +1947,24 @@ function abrirModalAbonoCuenta(idCuenta) {
   const cta = state.cuentas.find(c => c.id === idCuenta);
   if (!cta) return;
 
+  const datosEnv = obtenerDatosEnvioCuenta(cta);
+
   document.getElementById("abonoCuentaId").value = idCuenta;
   document.getElementById("abonoEntidadNombre").textContent = `${cta.tipo}: ${cta.entidad}`;
   
-  const saldoCRC = Number(cta.saldoPendienteCRC !== undefined ? cta.saldoPendienteCRC : cta.montoTotalCRC);
-  const saldoUSD = Number(cta.saldoPendienteUSD !== undefined ? cta.saldoPendienteUSD : cta.montoTotalUSD);
+  const saldoCRC = datosEnv.valorClienteCRC;
+  const saldoUSD = datosEnv.valorClienteUSD;
 
-  document.getElementById("abonoSaldoActualCRC").textContent = fmtCRC(saldoCRC);
-  document.getElementById("abonoSaldoActualUSD").textContent = fmtUSD(saldoUSD);
+  const elCRC = document.getElementById("abonoSaldoActualCRC");
+  const elUSD = document.getElementById("abonoSaldoActualUSD");
+  if (elCRC) {
+    if (datosEnv.tieneEnvio && cta.tipo === "Por Cobrar") {
+      elCRC.innerHTML = `<span>${fmtCRC(saldoCRC)}</span> <span class="text-[11px] text-emerald-400 font-normal block mt-0.5">(Neto real a recibir: ${fmtCRC(datosEnv.valorNetoCRC)} • Envío: -${fmtCRC(datosEnv.envioPendienteCRC)})</span>`;
+    } else {
+      elCRC.textContent = fmtCRC(saldoCRC);
+    }
+  }
+  if (elUSD) elUSD.textContent = fmtUSD(saldoUSD);
 
   document.getElementById("abonoMontoCRC").value = "";
   document.getElementById("abonoMontoUSD").value = "";
@@ -1828,7 +1992,8 @@ function llenarAbonoTotal() {
   const cta = state.cuentas.find(c => c.id === idCuenta);
   if (!cta) return;
 
-  const saldoCRC = Number(cta.saldoPendienteCRC !== undefined ? cta.saldoPendienteCRC : cta.montoTotalCRC);
+  const datosEnv = obtenerDatosEnvioCuenta(cta);
+  const saldoCRC = datosEnv.valorClienteCRC;
   const tc = Number(state.config.tipoCambio || 520);
   const saldoUSD = parseFloat((saldoCRC / tc).toFixed(2));
 
@@ -1855,6 +2020,7 @@ function guardarAbonoCuenta() {
   const cta = state.cuentas.find(c => c.id === idCuenta);
   if (!cta) return;
 
+  const datosEnv = obtenerDatosEnvioCuenta(cta);
   const abonoCRC = parseFloat(document.getElementById("abonoMontoCRC").value) || 0;
   const abonoUSD = parseFloat(document.getElementById("abonoMontoUSD").value) || 0;
   const metodo = document.getElementById("abonoMetodoPago").value;
@@ -1905,28 +2071,51 @@ function liquidarCuentaDirecto(idCuenta) {
   const cta = state.cuentas.find(c => c.id === idCuenta);
   if (!cta) return;
 
-  const saldoCRC = Number(cta.saldoPendienteCRC !== undefined ? cta.saldoPendienteCRC : cta.montoTotalCRC);
-  const saldoUSD = Number(cta.saldoPendienteUSD !== undefined ? cta.saldoPendienteUSD : cta.montoTotalUSD);
+  const datosEnv = obtenerDatosEnvioCuenta(cta);
+  const valorClienteCRC = datosEnv.valorClienteCRC;
+  const valorNetoCRC = datosEnv.valorNetoCRC;
+  const envioCRC = datosEnv.envioPendienteCRC;
 
-  if (!confirm(`¿Confirmas liquidar el saldo total de ${fmtCRC(saldoCRC)} de ${cta.entidad}?`)) return;
+  let mensajeConfirm = "";
+  if (datosEnv.tieneEnvio && cta.tipo === "Por Cobrar") {
+    mensajeConfirm = `¿Confirmas liquidar la cuenta de ${cta.entidad}?\n\n` +
+      `• Cobrado al cliente (Venta): ${fmtCRC(valorClienteCRC)}\n` +
+      `• Costo de envío descontado: -${fmtCRC(envioCRC)}\n` +
+      `------------------------------------\n` +
+      `• INGRESO NETO REAL A CAJA: ${fmtCRC(valorNetoCRC)}\n\n` +
+      `¿Deseas registrar la liquidación completa?`;
+  } else {
+    mensajeConfirm = `¿Confirmas liquidar el saldo total de ${fmtCRC(valorClienteCRC)} de ${cta.entidad}?`;
+  }
+
+  if (!confirm(mensajeConfirm)) return;
 
   cta.saldoPendienteCRC = 0;
   cta.saldoPendienteUSD = 0;
   cta.estado = "Pagado";
-  cta.notas = (cta.notas || "") + ` [Liquidado total ₡${saldoCRC} el ${new Date().toLocaleDateString()}]`;
+  const notaLiquidacion = datosEnv.tieneEnvio && cta.tipo === "Por Cobrar"
+    ? ` [Liquidado total: Cliente pagó ${fmtCRC(valorClienteCRC)}, Envío: -${fmtCRC(envioCRC)}, Ingreso neto real a caja: ${fmtCRC(valorNetoCRC)} el ${new Date().toLocaleDateString()}]`
+    : ` [Liquidado total ${fmtCRC(valorClienteCRC)} el ${new Date().toLocaleDateString()}]`;
+  cta.notas = (cta.notas || "") + notaLiquidacion;
 
   guardarCuentasLocal();
   encolarAccionSincronizacion("abonarCuenta", {
     id: idCuenta,
-    abonoCRC: saldoCRC,
-    abonoUSD: saldoUSD,
-    notas: "Liquidación completa"
+    abonoCRC: valorClienteCRC,
+    abonoNetoCRC: valorNetoCRC,
+    costoEnvioCRC: envioCRC,
+    abonoUSD: datosEnv.valorClienteUSD,
+    notas: `Liquidación completa (Neto caja: ${fmtCRC(valorNetoCRC)})`
   });
 
   renderizarCuentas();
   renderizarFinanzas();
   renderizarDashboard();
-  mostrarToast(`¡Cuenta de ${cta.entidad} liquidada totalmente! Dinero sumado a Caja 💵`, "success");
+  
+  const msgToast = datosEnv.tieneEnvio && cta.tipo === "Por Cobrar"
+    ? `¡Cuenta de ${cta.entidad} liquidada! Ingreso neto a Caja: ${fmtCRC(valorNetoCRC)} (Envío: -${fmtCRC(envioCRC)}) 💵`
+    : `¡Cuenta de ${cta.entidad} liquidada totalmente! Dinero sumado a Caja 💵`;
+  mostrarToast(msgToast, "success");
   if (window.confetti) window.confetti({ particleCount: 70, spread: 60, origin: { y: 0.8 } });
 }
 
@@ -3068,6 +3257,10 @@ function pasarVentaIndividualACuentasPorCobrar(idxVenta) {
     if (matchCli) tel = matchCli.telefono || "";
   }
 
+  const envioVentaCRC = parseNum(v.costoEnvioCRC, 0);
+  const tc = Number(state.config.tipoCambio || 520);
+  const envioVentaUSD = parseNum(v.costoEnvioUSD, 0) || (tc > 0 ? envioVentaCRC / tc : 0);
+
   const cuentaObj = {
     id: "CTA-" + Date.now().toString().slice(-6) + Math.floor(Math.random() * 90 + 10),
     fecha: v.fecha || new Date().toISOString(),
@@ -3075,14 +3268,17 @@ function pasarVentaIndividualACuentasPorCobrar(idxVenta) {
     entidad: cliNombre,
     telefono: tel,
     referenciaId: vUid, // ID único por fila/movimiento exacto
+    ventaId: v.id || "",
     montoTotalCRC: totCRC,
     montoTotalUSD: totUSD,
     saldoPendienteCRC: totCRC,
     saldoPendienteUSD: totUSD,
+    costoEnvioCRC: envioVentaCRC,
+    costoEnvioUSD: envioVentaUSD,
     estado: "Pendiente",
     fechaVencimiento: "",
     vendedor: v.vendedor || "Carlos",
-    notas: `Movimiento: ${cantProd}x ${nombreProd} (${v.metodoPago || 'Efectivo'})`
+    notas: `Movimiento: ${cantProd}x ${nombreProd} (${v.metodoPago || 'Efectivo'})${envioVentaCRC > 0 ? ` [Envío: ₡${envioVentaCRC}]` : ''}`
   };
 
   if (!state.cuentas) state.cuentas = [];
@@ -3624,6 +3820,11 @@ async function completarVenta() {
       const itUid = `${idVenta}_${itCod}_${itIdx}`;
       const uniqueSuffix = Math.floor(Math.random() * 900 + 100);
 
+      // Calcular envío proporcional por ítem
+      const propSub = totalFinalCRC > 0 ? (itSubCRC / totalFinalCRC) : (1 / ventaObj.items.length);
+      const itEnvioCRC = Math.round(envioVentaCRC * propSub);
+      const itEnvioUSD = tcActual > 0 ? (itEnvioCRC / tcActual) : 0;
+
       const cuentaObj = {
         id: "CTA-" + Date.now().toString().slice(-6) + uniqueSuffix,
         fecha: ventaObj.fecha,
@@ -3631,15 +3832,19 @@ async function completarVenta() {
         entidad: clienteNombre,
         telefono: clienteTelefono || "",
         referenciaId: itUid, // ID único por cada producto de la venta
+        ventaId: idVenta,    // Referencia a la venta madre
         montoTotalCRC: itSubCRC,
         montoTotalUSD: itSubUSD,
         saldoPendienteCRC: itSubCRC,
         saldoPendienteUSD: itSubUSD,
+        costoEnvioCRC: itEnvioCRC,   // Envío proporcional para descuento interno
+        costoEnvioUSD: itEnvioUSD,
         estado: "Pendiente",
         fechaVencimiento: "",
         vendedor,
-        notas: `Venta POS: ${it.cantidad}x ${it.nombre} (${idVenta})`
+        notas: `Venta POS: ${it.cantidad}x ${it.nombre} (${idVenta})${itEnvioCRC > 0 ? ` [Envío: ₡${itEnvioCRC}]` : ''}`
       };
+
 
       state.cuentas.unshift(cuentaObj);
       encolarAccionSincronizacion("registrarCuenta", { cuenta: cuentaObj });
@@ -3867,12 +4072,34 @@ function calcularSaldosFinancieros() {
   state.ventas.forEach(v => {
     const vid = v.id || "";
 
+    // Resolver costo de envío de la venta (si está en 0, buscar en notas o en cuenta CXC vinculada)
+    let envCRC = parseNum(v.costoEnvioCRC, 0);
+    if (envCRC === 0 && v.notas) {
+      const matchEnv = v.notas.match(/env[íi]o:\s*₡?\s*(\d+)/i) || v.notas.match(/flete:\s*₡?\s*(\d+)/i);
+      if (matchEnv && matchEnv[1]) envCRC = parseNum(matchEnv[1], 0);
+    }
+    if (envCRC === 0 && vid) {
+      const ctaMatch = (state.cuentas || []).find(c => 
+        c.tipo === "Por Cobrar" && (
+          c.ventaId === vid || 
+          (c.referenciaId && c.referenciaId.includes(vid)) || 
+          (c.notas && c.notas.includes(vid))
+        )
+      );
+      if (ctaMatch) {
+        const datosEnvCta = obtenerDatosEnvioCuenta(ctaMatch);
+        if (datosEnvCta.costoEnvioCRC > 0) {
+          envCRC = datosEnvCta.costoEnvioCRC;
+          v.costoEnvioCRC = envCRC;
+        }
+      }
+    }
+    const envUSD = tcActual > 0 ? (envCRC / tcActual) : 0;
+
     if (v.items && Array.isArray(v.items)) {
       // Formato local: objeto completo con items[], procesar una sola vez
       totalVentasCRC += Number(v.totalFinalCRC !== undefined ? v.totalFinalCRC : v.totalCRC) || 0;
       totalVentasUSD += Number(v.totalUSD) || 0;
-      const envCRC = Number(v.costoEnvioCRC || 0);
-      const envUSD = Number(v.costoEnvioUSD || (tcActual > 0 ? envCRC / tcActual : 0));
       totalEnvioVentasCRC += envCRC;
       totalEnvioVentasUSD += envUSD;
     } else {
@@ -3883,8 +4110,6 @@ function calcularSaldosFinancieros() {
 
       if (vid && !ventasIdSet.has(vid)) {
         ventasIdSet.add(vid);
-        const envCRC = Number(v.costoEnvioCRC || 0);
-        const envUSD = Number(v.costoEnvioUSD || (tcActual > 0 ? envCRC / tcActual : 0));
         totalEnvioVentasCRC += envCRC;
         totalEnvioVentasUSD += envUSD;
       }
@@ -3892,21 +4117,31 @@ function calcularSaldosFinancieros() {
   });
 
   // 1.1 Cuentas por Cobrar Pendientes (Dinero que aún no ha ingresado físicamente a caja)
+  // IMPORTANTE: Para el sistema interno, la deuda pendiente a favor de la empresa es el VALOR NETO REAL (Venta - Envío)
   let totalCxcPendienteCRC = 0;
   let totalCxcPendienteUSD = 0;
+  let totalCxcBrutoClienteCRC = 0;
+  let totalEnvioEnCxcCRC = 0;
 
   (state.cuentas || []).forEach(cta => {
     if (cta.tipo === "Por Cobrar" && (cta.estado || "Pendiente") !== "Pagado") {
-      const sCRC = Number(cta.saldoPendienteCRC || 0);
-      const sUSD = Number(cta.saldoPendienteUSD || 0) || (tcActual > 0 ? (sCRC / tcActual) : 0);
-      if (sCRC > 0) {
-        totalCxcPendienteCRC += sCRC;
-        totalCxcPendienteUSD += sUSD;
+      const datosEnv = obtenerDatosEnvioCuenta(cta);
+      const sNetoCRC = datosEnv.valorNetoCRC;
+      const sNetoUSD = datosEnv.valorNetoUSD;
+      if (sNetoCRC > 0) {
+        totalCxcPendienteCRC += sNetoCRC;
+        totalCxcPendienteUSD += sNetoUSD;
+        totalCxcBrutoClienteCRC += datosEnv.valorClienteCRC;
+        totalEnvioEnCxcCRC += datosEnv.envioPendienteCRC;
       }
     }
   });
 
-  // Ventas efectivamente cobradas en caja = (Total Facturado - CXC Pendiente) - Costo de Envío de las ventas
+  // Ventas efectivamente cobradas en caja = (Total Facturado - CXC Pendiente Neto) - Costo de Envío de las ventas
+  // Matemáticamente:
+  // - Venta de contado (10,000 con 1,800 envío) => 10,000 - 0 CXC - 1,800 envío = 8,200 cobrados a caja.
+  // - Venta pendiente en CXC (13,000 con 2,000 envío) => 13,000 - 11,000 CXC neto - 2,000 envío = 0 en caja (impacto nulo hasta que se cobre).
+  // - Cuando el cliente liquida su CXC => CXC neto pasa a 0 => 13,000 - 0 CXC - 2,000 envío = 11,000 netos que ingresan a caja.
   const ventasFacturadasCobradasCRC = Math.max(0, totalVentasCRC - totalCxcPendienteCRC);
   const ventasEfectivamenteCobradasCRC = Math.max(0, ventasFacturadasCobradasCRC - totalEnvioVentasCRC);
   const ventasEfectivamenteCobradasUSD = tcActual > 0 ? (ventasEfectivamenteCobradasCRC / tcActual) : 0;
@@ -4025,6 +4260,8 @@ function calcularSaldosFinancieros() {
       enviosVentasCRC: totalEnvioVentasCRC,
       cxcPendienteCRC: totalCxcPendienteCRC,
       cxcPendienteUSD: totalCxcPendienteUSD,
+      cxcBrutoClienteCRC: totalCxcBrutoClienteCRC,
+      envioEnCxcCRC: totalEnvioEnCxcCRC,
       gastosCRC: empresaGastosCRC + empresaPagaComprasCRC
     },
     carlos: {
@@ -4053,12 +4290,18 @@ function renderizarFinanzas() {
   if (elEmpresaCRC) elEmpresaCRC.textContent = fmtCRC(fin.empresa.saldoCRC);
   if (elEmpresaUSD) elEmpresaUSD.textContent = fmtUSD(fin.empresa.saldoUSD);
 
-  // Rubro Extra: Cuentas por Cobrar Pendientes (Dinero que falta por ingresar)
+  // Rubro Extra: Cuentas por Cobrar Pendientes (Dinero que falta por ingresar: Valor Neto Real)
   const elCxcCRC = document.getElementById("finCxcPendienteCRC");
   const elCxcUSD = document.getElementById("finCxcPendienteUSD");
   const elCxcBadge = document.getElementById("finCxcBadge");
   if (elCxcCRC) elCxcCRC.textContent = fmtCRC(fin.empresa.cxcPendienteCRC);
-  if (elCxcUSD) elCxcUSD.textContent = `(${fmtUSD(fin.empresa.cxcPendienteUSD)} USD)`;
+  if (elCxcUSD) {
+    if (fin.empresa.envioEnCxcCRC > 0) {
+      elCxcUSD.innerHTML = `<span>(${fmtUSD(fin.empresa.cxcPendienteUSD)} USD)</span><span class="block text-[9.5px] text-slate-400 font-sans mt-0.5">Bruto clientes: ${fmtCRC(fin.empresa.cxcBrutoClienteCRC)} | Envíos: -${fmtCRC(fin.empresa.envioEnCxcCRC)}</span>`;
+    } else {
+      elCxcUSD.textContent = `(${fmtUSD(fin.empresa.cxcPendienteUSD)} USD)`;
+    }
+  }
   if (elCxcBadge) {
     if (fin.empresa.cxcPendienteCRC > 0) {
       elCxcBadge.classList.remove("hidden");
@@ -5099,6 +5342,18 @@ async function _descargarDatosSheets(mostrarMensaje = false) {
       // 7. Cuentas: sincronizar Sheets + únicamente las cuentas pendientes en cola offline local
       if (json.data.cuentas !== undefined) {
         const cuentasSheets = Array.isArray(json.data.cuentas) ? json.data.cuentas : [];
+        const cuentasLocalesMap = new Map((state.cuentas || []).map(c => [c.id, c]));
+        
+        // Preservar metadatos locales de envío y ventaId si Sheets aún no los envía
+        cuentasSheets.forEach(c => {
+          const loc = cuentasLocalesMap.get(c.id);
+          if (loc) {
+            if (!c.costoEnvioCRC && loc.costoEnvioCRC) c.costoEnvioCRC = loc.costoEnvioCRC;
+            if (!c.costoEnvioUSD && loc.costoEnvioUSD) c.costoEnvioUSD = loc.costoEnvioUSD;
+            if (!c.ventaId && loc.ventaId) c.ventaId = loc.ventaId;
+          }
+        });
+
         const idsCuentasSheets = new Set(cuentasSheets.map(c => c.id || c.referenciaId));
         const cuentasSoloLocales = (state.cuentas || []).filter(c =>
           c && (c.id || c.referenciaId) &&
