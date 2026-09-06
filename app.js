@@ -47,6 +47,7 @@ let state = {
   descuentoPuntosAplicado: 0, // descuento en CRC aplicado de puntos en la venta actual
   pedidos: [], // Lista de pedidos / encargos de clientes
   cuentas: [], // Lista de cuentas pendientes (Por Cobrar / Por Pagar)
+  anulaciones: [], // Historial informativo de ventas anuladas
   filtroCuentas: "",
   filtroTipoCuenta: "Por Cobrar", // "Por Cobrar" | "Por Pagar" | "todos"
   modoPOS: "venta", // "venta" | "pedido"
@@ -272,6 +273,11 @@ function cargarEstadoLocal() {
     try { state.cuentas = JSON.parse(ctas); } catch(e) { state.cuentas = []; }
   }
 
+  const anuls = localStorage.getItem("inv_anulaciones_v2");
+  if (anuls) {
+    try { state.anulaciones = JSON.parse(anuls); } catch(e) { state.anulaciones = []; }
+  }
+
   const savedVista = localStorage.getItem("inv_vista_vendedor");
   if (savedVista) {
     state.vistaVendedor = savedVista;
@@ -293,6 +299,9 @@ function guardarPedidosLocal() {
 }
 function guardarCuentasLocal() {
   localStorage.setItem("inv_cuentas_v2", JSON.stringify(state.cuentas));
+}
+function guardarAnulacionesLocal() {
+  localStorage.setItem("inv_anulaciones_v2", JSON.stringify(state.anulaciones));
 }
 function guardarFinanzasLocal() {
   localStorage.setItem("inv_finanzas_v2", JSON.stringify(state.movimientosDinero));
@@ -365,7 +374,7 @@ function calcularStockDetalladoPorCodigo() {
     } else if (typeof v.items === "string") {
       try { items = JSON.parse(v.items); } catch(e) { items = []; }
     } else if (v.codigo) {
-      items = [{ codigo: v.codigo, cantidad: v.cantidad }];
+      items = [{ codigo: v.codigo, cantidad: v.cantidad, inventarioVendedor: v.inventarioVendedor || vend }];
     }
 
     items.forEach(i => {
@@ -512,6 +521,7 @@ function cambiarVista(vista) {
     if (tc && state.config.tipoCambio) tc.value = state.config.tipoCambio;
     const ph = document.getElementById("businessPhoneInput");
     if (ph && state.config.telefonoNegocio) ph.value = state.config.telefonoNegocio;
+    renderizarModuloAnulaciones();
   }
 
   inicializarIconos();
@@ -5463,6 +5473,7 @@ async function _descargarDatosSheets(mostrarMensaje = false) {
             ...v,
             codigo: String(v.codigo || "").trim().toUpperCase(),
             cantidad: parseNum(v.cantidad, 1),
+            inventarioVendedor: String(v.inventarioVendedor || v.vendedor || "Carlos").trim(),
             precioUSD: pUSD,
             precioVentaUSD: pUSD,
             precioCRC: pCRC,
@@ -5537,6 +5548,12 @@ async function _descargarDatosSheets(mostrarMensaje = false) {
         );
         state.cuentas = [...cuentasSheets, ...cuentasSoloLocales];
         guardarCuentasLocal();
+      }
+
+      // 8. Anulaciones: Reflejar hoja Anulaciones de Sheets (historial informativo)
+      if (json.data.anulaciones !== undefined) {
+        state.anulaciones = Array.isArray(json.data.anulaciones) ? json.data.anulaciones : [];
+        guardarAnulacionesLocal();
       }
 
       renderizarTodo();
@@ -5772,6 +5789,336 @@ function limpiarCacheLocal() {
       location.reload();
     }
   }
+}
+
+// ==========================================================================
+// MÓDULO DE ANULACIÓN DE VENTAS (CONFIGURACIONES)
+// ==========================================================================
+let ventaSeleccionadaParaAnular = null;
+
+function renderizarModuloAnulaciones() {
+  poblarSelectorVentasParaAnular();
+  renderizarHistorialAnulaciones();
+  const selectResp = document.getElementById("anularVendedorResponsable");
+  if (selectResp) selectResp.value = state.vendedorActual || "Carlos";
+}
+
+function obtenerListaVentasAgrupadas() {
+  const ventas = state.ventas || [];
+  const agrupadas = new Map();
+
+  ventas.forEach((v, idx) => {
+    if (!v) return;
+    const id = String(v.id || ("VTA_LOCAL_" + idx)).trim();
+    if (!agrupadas.has(id)) {
+      const pCRC = parseNum(v.precioCRC !== undefined ? v.precioCRC : v.precioVentaCRC, 0);
+      const pUSD = parseNum(v.precioUSD !== undefined ? v.precioUSD : v.precioVentaUSD, 0);
+      const cant = parseNum(v.cantidad, 1);
+      const subCRC = parseNum(v.totalCRC !== undefined ? v.totalCRC : v.totalFinalCRC, cant * pCRC);
+      const subUSD = parseNum(v.totalUSD, cant * pUSD);
+      const vendVenta = String(v.vendedor || "Carlos").trim();
+      const invVend = String(v.inventarioVendedor || vendVenta).trim();
+
+      let items = [];
+      if (v.items && Array.isArray(v.items) && v.items.length > 0) {
+        items = v.items.map(it => ({
+          codigo: it.codigo,
+          nombre: it.nombre || it.codigo,
+          cantidad: parseNum(it.cantidad, 1),
+          precioCRC: parseNum(it.precioVentaCRC !== undefined ? it.precioVentaCRC : it.precioCRC, 0),
+          precioUSD: parseNum(it.precioVentaUSD !== undefined ? it.precioVentaUSD : it.precioUSD, 0),
+          subtotalCRC: parseNum(it.subtotalCRC, parseNum(it.cantidad, 1) * parseNum(it.precioVentaCRC || it.precioCRC, 0)),
+          subtotalUSD: parseNum(it.subtotalUSD, parseNum(it.cantidad, 1) * parseNum(it.precioVentaUSD || it.precioUSD, 0)),
+          inventarioVendedor: String(it.inventarioVendedor || vendVenta).trim()
+        }));
+      } else if (v.codigo) {
+        items = [{
+          codigo: v.codigo,
+          nombre: v.nombre || v.codigo,
+          cantidad: cant,
+          precioCRC: pCRC,
+          precioUSD: pUSD,
+          subtotalCRC: subCRC,
+          subtotalUSD: subUSD,
+          inventarioVendedor: invVend
+        }];
+      }
+
+      agrupadas.set(id, {
+        id: id,
+        fecha: v.fecha || "",
+        vendedor: vendVenta,
+        cliente: v.cliente || "Cliente General",
+        clienteTelefono: v.clienteTelefono || "",
+        metodoPago: v.metodoPago || "Efectivo",
+        totalCRC: subCRC,
+        totalUSD: subUSD,
+        items: items
+      });
+    } else {
+      // Venta en formato Sheets (fila por producto con mismo id)
+      const ventaPadre = agrupadas.get(id);
+      const pCRC = parseNum(v.precioCRC !== undefined ? v.precioCRC : v.precioVentaCRC, 0);
+      const pUSD = parseNum(v.precioUSD !== undefined ? v.precioUSD : v.precioVentaUSD, 0);
+      const cant = parseNum(v.cantidad, 1);
+      const subCRC = parseNum(v.totalCRC, cant * pCRC);
+      const subUSD = parseNum(v.totalUSD, cant * pUSD);
+      const vendVenta = String(v.vendedor || ventaPadre.vendedor || "Carlos").trim();
+      const invVend = String(v.inventarioVendedor || vendVenta).trim();
+
+      ventaPadre.totalCRC += subCRC;
+      ventaPadre.totalUSD += subUSD;
+      ventaPadre.items.push({
+        codigo: v.codigo,
+        nombre: v.nombre || v.codigo,
+        cantidad: cant,
+        precioCRC: pCRC,
+        precioUSD: pUSD,
+        subtotalCRC: subCRC,
+        subtotalUSD: subUSD,
+        inventarioVendedor: invVend
+      });
+    }
+  });
+
+  return Array.from(agrupadas.values());
+}
+
+function poblarSelectorVentasParaAnular(filtroTexto = "") {
+  const select = document.getElementById("anularSelectVenta");
+  if (!select) return;
+
+  const ventas = obtenerListaVentasAgrupadas();
+  const q = String(filtroTexto).trim().toLowerCase();
+
+  const filtradas = ventas.filter(v => {
+    if (!q) return true;
+    const matchId = String(v.id || "").toLowerCase().includes(q);
+    const matchCli = String(v.cliente || "").toLowerCase().includes(q);
+    const matchItems = (v.items || []).some(it => 
+      String(it.nombre || "").toLowerCase().includes(q) || 
+      String(it.codigo || "").toLowerCase().includes(q)
+    );
+    return matchId || matchCli || matchItems;
+  });
+
+  select.innerHTML = '<option value="">-- Elige una venta de la lista --</option>';
+
+  if (filtradas.length === 0) {
+    select.innerHTML += '<option value="" disabled>No se encontraron ventas coincidentes</option>';
+    return;
+  }
+
+  filtradas.forEach(v => {
+    const fStr = v.fecha ? new Date(v.fecha).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : "S/F";
+    const nProds = v.items && v.items.length > 0 ? v.items.length : 1;
+    const opt = document.createElement("option");
+    opt.value = v.id;
+    opt.textContent = `${v.id} • ${fStr} • ${v.cliente} (${fmtCRC(v.totalCRC)}) [${v.vendedor}]`;
+    select.appendChild(opt);
+  });
+}
+
+function filtrarVentasParaAnular() {
+  const input = document.getElementById("anularBusquedaVenta");
+  poblarSelectorVentasParaAnular(input ? input.value : "");
+}
+
+function seleccionarVentaParaAnular() {
+  const select = document.getElementById("anularSelectVenta");
+  const box = document.getElementById("anularDetalleVentaBox");
+  if (!select || !box) return;
+
+  const idSeleccionado = select.value;
+  if (!idSeleccionado) {
+    box.classList.add("hidden");
+    ventaSeleccionadaParaAnular = null;
+    return;
+  }
+
+  const ventas = obtenerListaVentasAgrupadas();
+  const venta = ventas.find(v => v.id === idSeleccionado);
+  if (!venta) {
+    box.classList.add("hidden");
+    ventaSeleccionadaParaAnular = null;
+    return;
+  }
+
+  ventaSeleccionadaParaAnular = venta;
+
+  // Llenar campos de la tarjeta
+  document.getElementById("anularDetalleId").textContent = venta.id;
+  const vendBadge = document.getElementById("anularDetalleVendedorFacturo");
+  vendBadge.textContent = `Facturó: ${venta.vendedor}`;
+  vendBadge.className = venta.vendedor === "Daniel" 
+    ? "px-2 py-0.5 rounded text-[10px] font-bold bg-violet-950/80 border border-violet-500/40 text-violet-300"
+    : "px-2 py-0.5 rounded text-[10px] font-bold bg-blue-950/80 border border-blue-500/40 text-blue-300";
+
+  document.getElementById("anularDetalleCliente").textContent = venta.cliente || "Cliente General";
+  document.getElementById("anularDetalleFecha").textContent = venta.fecha ? new Date(venta.fecha).toLocaleString() : "Sin fecha";
+  document.getElementById("anularDetalleTotal").textContent = `${fmtCRC(venta.totalCRC)} (${fmtUSD(venta.totalUSD)})`;
+
+  // Renderizar desglose de productos y vendedor del inventario
+  const listCont = document.getElementById("anularDetalleItemsList");
+  listCont.innerHTML = (venta.items || []).map(it => {
+    const duenoInv = it.inventarioVendedor || venta.vendedor || "Carlos";
+    const esCruzado = duenoInv !== venta.vendedor;
+    const invColor = duenoInv === "Daniel" ? "text-violet-300 bg-violet-950/60 border-violet-500/30" : "text-blue-300 bg-blue-950/60 border-blue-500/30";
+
+    return `
+      <div class="flex items-center justify-between p-2 rounded-xl bg-slate-900 border border-slate-800">
+        <div class="min-w-0 flex-1 pr-2">
+          <div class="font-bold text-white truncate">${it.nombre || it.codigo}</div>
+          <div class="text-[10px] text-slate-400 font-mono">${it.cantidad} unidad(es) • ${fmtCRC(it.subtotalCRC || 0)}</div>
+        </div>
+        <div class="shrink-0 text-right">
+          <span class="inline-flex items-center gap-1 text-[9px] font-black px-2 py-0.5 rounded-lg border ${invColor}">
+            <span>📦 Stock:</span>
+            <span>${duenoInv}</span>
+          </span>
+          ${esCruzado ? '<div class="text-[9px] text-amber-300 font-bold mt-0.5">⚠️ Inventario Cruzado</div>' : ''}
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  box.classList.remove("hidden");
+  inicializarIconos();
+}
+
+async function confirmarYEjecutarAnulacion() {
+  if (!ventaSeleccionadaParaAnular) {
+    mostrarToast("Selecciona una venta primero", "error");
+    return;
+  }
+
+  const venta = ventaSeleccionadaParaAnular;
+  const responsable = document.getElementById("anularVendedorResponsable")?.value || state.vendedorActual || "Carlos";
+  const motivo = document.getElementById("anularMotivoInput")?.value?.trim() || "Anulación manual";
+
+  const confirmMsg = `¿Estás seguro de anular la factura ${venta.id}?\n\n` +
+    `• Vendedor que facturó: ${venta.vendedor}\n` +
+    `• Anulado por: ${responsable}\n` +
+    `• El inventario regresará exactamente al vendedor correspondiente.\n` +
+    `• Se eliminarán las cuentas por cobrar vinculadas.\n` +
+    `• Esta acción no se puede deshacer.`;
+
+  if (!confirm(confirmMsg)) return;
+
+  const fechaAnul = new Date().toISOString();
+
+  // 1. Crear registros de anulación informativos locales
+  const nuevosRegistrosAnulacion = (venta.items || []).map(it => {
+    const idAnul = "ANU-" + Date.now().toString().slice(-6) + Math.floor(Math.random() * 900 + 100);
+    const invStock = String(it.inventarioVendedor || venta.vendedor || "Carlos").trim();
+    return {
+      id: idAnul,
+      fecha: fechaAnul,
+      idVenta: venta.id,
+      vendedorFacturo: venta.vendedor,
+      inventarioDe: invStock,
+      codigo: it.codigo,
+      nombre: it.nombre || it.codigo,
+      cantidad: it.cantidad,
+      totalCRC: it.subtotalCRC || 0,
+      totalUSD: it.subtotalUSD || 0,
+      cliente: venta.cliente || "",
+      anuladoPor: responsable,
+      motivo: motivo
+    };
+  });
+
+  if (!state.anulaciones) state.anulaciones = [];
+  state.anulaciones.unshift(...nuevosRegistrosAnulacion);
+  guardarAnulacionesLocal();
+
+  // 2. Remover la venta de state.ventas (descuento del inventario y finanzas queda revertido)
+  state.ventas = (state.ventas || []).filter(v => String(v.id || "").trim() !== String(venta.id).trim());
+  guardarVentasLocal();
+
+  // 3. Eliminar Cuentas por Cobrar (CXC) generadas por esta venta
+  let cxcBorradas = 0;
+  if (state.cuentas && state.cuentas.length > 0) {
+    const prevLen = state.cuentas.length;
+    state.cuentas = state.cuentas.filter(c => {
+      const ref = String(c.referenciaId || "");
+      const vid = String(c.ventaId || "");
+      const not = String(c.notas || "");
+      const match = ref.includes(venta.id) || vid === venta.id || not.includes(venta.id);
+      return !match;
+    });
+    cxcBorradas = prevLen - state.cuentas.length;
+    guardarCuentasLocal();
+  }
+
+  // 4. Encolar acción de sincronización para Google Sheets
+  const payloadAnulacion = {
+    idVenta: venta.id,
+    vendedor: venta.vendedor,
+    cliente: venta.cliente,
+    anuladoPor: responsable,
+    motivo: motivo,
+    items: venta.items
+  };
+  encolarAccionSincronizacion("anularVenta", { datos: payloadAnulacion });
+
+  // 5. Limpiar formulario y re-renderizar
+  ventaSeleccionadaParaAnular = null;
+  document.getElementById("anularDetalleVentaBox")?.classList.add("hidden");
+  document.getElementById("anularBusquedaVenta").value = "";
+  if (document.getElementById("anularMotivoInput")) document.getElementById("anularMotivoInput").value = "";
+  poblarSelectorVentasParaAnular();
+  renderizarHistorialAnulaciones();
+  renderizarTodo();
+
+  mostrarToast(`Factura ${venta.id} anulada por ${responsable}. Stock devuelto y ${cxcBorradas} CXC eliminada(s) 🔄`, "success");
+}
+
+function renderizarHistorialAnulaciones() {
+  const cont = document.getElementById("anularHistorialList");
+  const badge = document.getElementById("anularCountBadge");
+  if (!cont) return;
+
+  const lista = state.anulaciones || [];
+  if (badge) badge.textContent = `${lista.length} registros`;
+
+  if (lista.length === 0) {
+    cont.innerHTML = `
+      <div class="text-center py-5 text-slate-500 text-xs bg-slate-950/40 rounded-xl border border-slate-800/60">
+        No hay registros de ventas anuladas.
+      </div>
+    `;
+    return;
+  }
+
+  cont.innerHTML = lista.map(a => {
+    const fStr = a.fecha ? new Date(a.fecha).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : "S/F";
+    const invColor = a.inventarioDe === "Daniel" ? "text-violet-300 bg-violet-950/60 border-violet-500/30" : "text-blue-300 bg-blue-950/60 border-blue-500/30";
+    const respColor = a.anuladoPor === "Daniel" ? "text-violet-400" : "text-blue-400";
+
+    return `
+      <div class="p-2.5 bg-slate-950/80 border border-slate-800 rounded-xl space-y-1.5 text-xs">
+        <div class="flex items-center justify-between">
+          <span class="font-mono font-bold text-rose-400 text-[11px]">${a.idVenta || a.id}</span>
+          <span class="text-[10px] text-slate-400 font-mono">${fStr}</span>
+        </div>
+        <div class="flex items-center justify-between text-slate-300">
+          <span class="font-semibold text-white truncate max-w-[180px]">${a.nombre || a.codigo} (${a.cantidad}x)</span>
+          <span class="font-mono font-bold text-slate-200">${fmtCRC(a.totalCRC || 0)}</span>
+        </div>
+        <div class="flex items-center justify-between pt-1 border-t border-slate-800/80 text-[10px]">
+          <div class="text-slate-400">
+            Anuló: <span class="font-bold ${respColor}">${a.anuladoPor || 'Carlos'}</span>
+            ${a.cliente ? ` • <span class="text-slate-500">${a.cliente}</span>` : ''}
+          </div>
+          <span class="px-1.5 py-0.2 rounded border font-semibold ${invColor}">
+            ↩ Stock devuelto a: <b>${a.inventarioDe || a.vendedorFacturo || 'Carlos'}</b>
+          </span>
+        </div>
+        ${a.motivo ? `<div class="text-[9.5px] text-slate-500 italic">Motivo: "${a.motivo}"</div>` : ''}
+      </div>
+    `;
+  }).join("");
 }
 
 // ==========================================================================

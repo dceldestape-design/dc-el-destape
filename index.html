@@ -1178,6 +1178,112 @@
         </div>
       </div>
 
+      <!-- ============================================================== -->
+      <!-- MÓDULO: ANULACIÓN DE VENTAS Y RESTITUCIÓN DE INVENTARIO        -->
+      <!-- ============================================================== -->
+      <div class="bg-gradient-to-br from-rose-950/40 via-slate-900 to-slate-900 border border-rose-500/40 rounded-3xl p-4 space-y-3.5 shadow-xl">
+        <div class="flex items-center justify-between border-b border-rose-500/20 pb-2.5">
+          <div class="flex items-center gap-2 text-rose-400">
+            <div class="w-8 h-8 rounded-xl bg-rose-500/20 border border-rose-500/40 flex items-center justify-center">
+              <i data-lucide="rotate-ccw" class="w-4 h-4 text-rose-300"></i>
+            </div>
+            <div>
+              <h2 class="text-sm font-black text-white uppercase tracking-wider">Anulación de Ventas</h2>
+              <p class="text-[10px] text-rose-300/80 font-medium">Devuelve stock al dueño real y cancela CXC</p>
+            </div>
+          </div>
+          <span class="text-[9px] font-black uppercase px-2 py-0.5 rounded-lg bg-rose-950/80 border border-rose-500/40 text-rose-300 font-mono">Control</span>
+        </div>
+
+        <p class="text-xs text-slate-300 leading-relaxed bg-rose-950/20 border border-rose-500/20 rounded-xl p-2.5">
+          ℹ️ Al anular una venta, el inventario se devuelve automáticamente al vendedor que aportó el stock (Daniel o Carlos), se eliminan las Cuentas por Cobrar generadas y queda el registro permanente de auditoría de quién anuló.
+        </p>
+
+        <!-- Buscador / Selector de Venta para anular -->
+        <div class="space-y-2">
+          <label class="block font-bold text-xs text-slate-200">Seleccionar Venta para Anular:</label>
+          <div class="relative">
+            <input type="text" id="anularBusquedaVenta" oninput="filtrarVentasParaAnular()" placeholder="Buscar por ID (ej. VTA-...), cliente o producto..." class="w-full px-3 py-2.5 pl-8 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-rose-500 font-mono">
+            <i data-lucide="search" class="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-3"></i>
+          </div>
+
+          <!-- Selector dropdown dinámico de ventas -->
+          <select id="anularSelectVenta" onchange="seleccionarVentaParaAnular()" class="w-full px-3 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white font-medium focus:outline-none focus:border-rose-500">
+            <option value="">-- Elige una venta de la lista --</option>
+          </select>
+        </div>
+
+        <!-- Tarjeta de detalle de la venta seleccionada -->
+        <div id="anularDetalleVentaBox" class="hidden space-y-3 bg-slate-950/80 border border-rose-500/30 rounded-2xl p-3 text-xs animate-pop-in">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+            <div>
+              <span class="text-[10px] text-slate-400 font-mono">Factura:</span>
+              <span id="anularDetalleId" class="font-bold text-white font-mono ml-1">-</span>
+            </div>
+            <span id="anularDetalleVendedorFacturo" class="px-2 py-0.5 rounded text-[10px] font-bold">-</span>
+          </div>
+
+          <div class="space-y-1 text-slate-300">
+            <div class="flex justify-between">
+              <span class="text-slate-400">Cliente:</span>
+              <span id="anularDetalleCliente" class="font-bold text-white">-</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-slate-400">Fecha:</span>
+              <span id="anularDetalleFecha" class="font-mono text-slate-300">-</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-slate-400">Monto Total:</span>
+              <span id="anularDetalleTotal" class="font-bold font-mono text-emerald-400">-</span>
+            </div>
+          </div>
+
+          <!-- Desglose de ítems y a quién regresa el inventario -->
+          <div class="border-t border-slate-800 pt-2 space-y-1.5">
+            <span class="text-[11px] font-bold text-slate-300 block">Productos a reintegrar al stock:</span>
+            <div id="anularDetalleItemsList" class="space-y-1.5">
+              <!-- Renderizado por JS -->
+            </div>
+          </div>
+
+          <!-- Campos de confirmación -->
+          <div class="border-t border-slate-800 pt-2.5 space-y-2.5">
+            <div>
+              <label class="block font-semibold text-slate-300 mb-1">¿Quién anula esta venta? *</label>
+              <select id="anularVendedorResponsable" class="w-full px-3 py-2 bg-slate-900 border border-rose-500/40 rounded-xl text-white font-bold text-xs">
+                <option value="Carlos">👤 Carlos</option>
+                <option value="Daniel">👤 Daniel</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block font-semibold text-slate-300 mb-1">Motivo de la anulación:</label>
+              <input type="text" id="anularMotivoInput" placeholder="Ej: Error en facturación, cliente canceló..." class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500">
+            </div>
+
+            <button onclick="confirmarYEjecutarAnulacion()" class="w-full py-3 bg-rose-600 hover:bg-rose-500 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-rose-600/30 active:scale-95 transition-all flex items-center justify-center gap-2">
+              <i data-lucide="trash-2" class="w-4 h-4"></i>
+              <span>Confirmar Anulación de Venta</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Historial Informativo de Ventas Anuladas -->
+        <div class="border-t border-slate-800/90 pt-3 space-y-2">
+          <div class="flex items-center justify-between">
+            <h3 class="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+              <i data-lucide="clipboard-list" class="w-3.5 h-3.5 text-slate-400"></i>
+              <span>Historial Informativo de Anulaciones</span>
+            </h3>
+            <span id="anularCountBadge" class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-800 text-slate-400">0 registros</span>
+          </div>
+
+          <div id="anularHistorialList" class="space-y-2 max-h-60 overflow-y-auto pr-0.5">
+            <!-- Renderizado por JS -->
+          </div>
+        </div>
+      </div>
+
       <!-- Reset & Reload Demo -->
       <div class="bg-slate-800/40 border border-slate-800 rounded-2xl p-4 space-y-3 text-xs">
         <div class="flex items-center justify-between">
@@ -2035,6 +2141,6 @@
   </nav>
 
   <!-- Application Logic -->
-  <script src="app.js?v=20260906_01"></script>
+  <script src="app.js?v=20260906_03"></script>
 </body>
 </html>
