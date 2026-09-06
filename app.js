@@ -545,6 +545,7 @@ function renderizarTodo() {
   renderizarFinanzas();
   renderizarClientes();
   renderizarCuentas();
+  renderizarHistorialAnulaciones();
   inicializarIconos();
 }
 
