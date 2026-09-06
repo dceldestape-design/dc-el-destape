@@ -1554,6 +1554,30 @@ function renderizarClientes() {
   inicializarIconos();
 }
 
+// --- Portal de Puntos de Clientes (Taberna) ---
+function copiarEnlacePortalClientes() {
+  const urlBase = window.location.href.split("?")[0].replace("index.html", "") + "puntos.html";
+  const apiUrl = (state.config && state.config.sheetsUrl) ? state.config.sheetsUrl : "";
+  const urlCompleta = apiUrl ? `${urlBase}?api=${encodeURIComponent(apiUrl)}` : urlBase;
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(urlCompleta).then(() => {
+      mostrarToast("¡Enlace del Portal de Clientes copiado! Envíalo por WhatsApp 🍻", "success");
+    }).catch(() => {
+      prompt("Copia este enlace para enviarlo a tus clientes:", urlCompleta);
+    });
+  } else {
+    prompt("Copia este enlace para enviarlo a tus clientes:", urlCompleta);
+  }
+}
+
+function abrirPortalClientes() {
+  const urlBase = window.location.href.split("?")[0].replace("index.html", "") + "puntos.html";
+  const apiUrl = (state.config && state.config.sheetsUrl) ? state.config.sheetsUrl : "";
+  const urlCompleta = apiUrl ? `${urlBase}?api=${encodeURIComponent(apiUrl)}` : urlBase;
+  window.open(urlCompleta, "_blank");
+}
+
 // ==========================================================================
 // MÓDULO: CUENTAS PENDIENTES (POR COBRAR Y POR PAGAR)
 // ==========================================================================
@@ -2604,7 +2628,7 @@ function abrirModalProducto(productoOcodigo = null) {
     document.getElementById("prodCostoRefCRC").value = Number(producto.costoRefCRC || 0);
     
     // Si ya tiene costo y precio, calcular el margen que tiene actualmente
-    let margenActual = 70;
+    let margenActual = 80;
     if (cUSD > 0 && pUSD >= cUSD) {
       margenActual = Number((((pUSD - cUSD) / cUSD) * 100).toFixed(1));
     }
@@ -2623,7 +2647,7 @@ function abrirModalProducto(productoOcodigo = null) {
     document.getElementById("prodCodigo").disabled = false;
     document.getElementById("prodCodigo").value = "LIC-" + Math.floor(100 + Math.random() * 900);
     document.getElementById("prodImagenUrl").value = "";
-    document.getElementById("prodMargenPorcentaje").value = 70;
+    document.getElementById("prodMargenPorcentaje").value = 80;
     document.getElementById("prodStockMinimo").value = 2;
     document.getElementById("prodCostoRefUSD").value = "";
     document.getElementById("prodCostoRefCRC").value = "0";
@@ -5220,7 +5244,7 @@ async function _descargarDatosSheets(mostrarMensaje = false) {
   if (icon) icon.classList.add("animate-spin");
 
   try {
-    const url = `${state.config.sheetsUrl}?action=getTodo&t=${Date.now()}`;
+    const url = `${state.config.sheetsUrl}?action=getTodo&token=DCDestape2026TabernaVIP!&t=${Date.now()}`;
     const resp = await fetch(url, { cache: "no-store" });
     const json = await resp.json();
 
@@ -5419,7 +5443,7 @@ async function probarConexionSheets() {
   }
   mostrarToast("Probando conexión...", "info");
   try {
-    const resp = await fetch(`${url}?action=ping`);
+    const resp = await fetch(`${url}?action=ping&token=DCDestape2026TabernaVIP!`);
     const json = await resp.json();
     if (json.success) mostrarToast("¡Conexión Exitosa con Google Sheets! 🎉", "success");
   } catch(e) {
@@ -5434,7 +5458,7 @@ async function diagnosticarPedidos() {
   }
   mostrarToast("Consultando encargos en Sheets...", "info");
   try {
-    const resp = await fetch(`${state.config.sheetsUrl}?action=getPedidos&t=${Date.now()}`, { cache: "no-store" });
+    const resp = await fetch(`${state.config.sheetsUrl}?action=getPedidos&token=DCDestape2026TabernaVIP!&t=${Date.now()}`, { cache: "no-store" });
     const json = await resp.json();
     console.log("[DIAG] getPedidos completo:", json);
 
