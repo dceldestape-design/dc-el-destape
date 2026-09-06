@@ -1,7 +1,8 @@
-const CACHE_NAME = 'inventory-sheets-v46';
+const CACHE_NAME = 'inventory-sheets-v48';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
+  './puntos.html',
   './styles.css',
   './app.js',
   './manifest.json',
@@ -18,6 +19,7 @@ const ASSETS_TO_CACHE = [
 const NETWORK_FIRST_PATTERNS = [
   /app\.js/,
   /index\.html/,
+  /puntos\.html/,
   /styles\.css/,
 ];
 

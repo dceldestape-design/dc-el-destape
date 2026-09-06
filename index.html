@@ -733,6 +733,29 @@
     <!-- ============================================================== -->
     <section id="viewClientes" class="space-y-3 hidden">
 
+      <!-- Banner Portal de Puntos de Clientes (Taberna) -->
+      <div class="bg-gradient-to-r from-amber-950/80 via-stone-900 to-amber-950/60 border border-amber-500/40 rounded-2xl p-3.5 shadow-lg flex items-center justify-between gap-3">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <div class="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-xl shrink-0">
+            <span>🍻</span>
+          </div>
+          <div class="min-w-0">
+            <h3 class="text-xs font-black text-amber-300 uppercase tracking-wider font-sans">Club de la Taberna (Portal Clientes)</h3>
+            <p class="text-[10px] text-stone-400 truncate">Permite a tus clientes consultar sus puntos con su celular</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-1.5 shrink-0">
+          <button type="button" onclick="copiarEnlacePortalClientes()" class="px-2.5 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 rounded-xl text-xs font-bold flex items-center gap-1 active:scale-95 transition-all" title="Copiar link para enviar por WhatsApp">
+            <i data-lucide="share-2" class="w-3.5 h-3.5"></i>
+            <span>Compartir</span>
+          </button>
+          <button type="button" onclick="abrirPortalClientes()" class="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center gap-1 active:scale-95 transition-all" title="Abrir portal de taberna">
+            <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
+            <span>Ver</span>
+          </button>
+        </div>
+      </div>
+
       <!-- Header con buscador -->
       <div class="flex items-center gap-2">
         <div class="relative flex-1">
@@ -1665,6 +1688,53 @@
   </div>
 
   <!-- ============================================================== -->
+  <!-- MODAL: ALERTA DE INVENTARIO CRUZADO (CARLOS / DANIEL)          -->
+  <!-- ============================================================== -->
+  <div id="modalInventarioCruzado" class="fixed inset-0 z-50 bg-black/85 backdrop-blur-md hidden items-center justify-center p-4">
+    <div class="bg-slate-900 border border-amber-500/40 rounded-3xl max-w-sm w-full p-5 space-y-4 shadow-2xl shadow-amber-500/20 animate-pop-in">
+      <div class="flex items-center gap-3">
+        <div class="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0">
+          <i data-lucide="alert-triangle" class="w-6 h-6"></i>
+        </div>
+        <div>
+          <h3 class="text-sm font-black text-white uppercase tracking-wider">Disponibilidad de Inventario</h3>
+          <p class="text-[11px] text-amber-300 font-semibold" id="modalInvCruzadoSubtitulo">Inventario disponible con otro vendedor</p>
+        </div>
+      </div>
+
+      <div class="bg-slate-950/80 border border-slate-800 rounded-2xl p-3.5 space-y-2 text-xs">
+        <div class="flex items-center justify-between">
+          <span class="text-slate-400">Producto:</span>
+          <span id="modalInvCruzadoProducto" class="font-bold text-white text-right truncate max-w-[180px]">-</span>
+        </div>
+        <div class="flex items-center justify-between border-t border-slate-800/80 pt-2">
+          <span id="modalInvCruzadoLabelVendedorSin" class="text-slate-400">Stock Carlos:</span>
+          <span id="modalInvCruzadoStockSin" class="font-mono font-bold text-rose-400">0 unidades</span>
+        </div>
+        <div class="flex items-center justify-between border-t border-slate-800/80 pt-2">
+          <span id="modalInvCruzadoLabelVendedorCon" class="text-emerald-400 font-semibold">Stock Daniel:</span>
+          <span id="modalInvCruzadoStockCon" class="font-mono font-bold text-emerald-400">0 unidades</span>
+        </div>
+      </div>
+
+      <p id="modalInvCruzadoMensaje" class="text-xs text-slate-200 leading-relaxed bg-amber-950/30 border border-amber-500/30 rounded-xl p-3">
+        <!-- Texto dinámico: Daniel sí tiene inventario. ¿Quieres agregar este producto con el inventario de Daniel? -->
+      </p>
+
+      <div class="space-y-2 pt-1">
+        <button id="modalInvCruzadoBtnAceptar" class="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-2xl shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2 active:scale-95 transition-all">
+          <i data-lucide="check-circle" class="w-4 h-4"></i>
+          <span id="modalInvCruzadoBtnAceptarTexto">Sí, agregar con inventario de Daniel</span>
+        </button>
+
+        <button onclick="cerrarModalInventarioCruzado()" class="w-full py-2.5 px-4 bg-slate-800 hover:bg-slate-750 text-slate-300 font-semibold text-xs rounded-2xl border border-slate-700 active:scale-95 transition-all">
+          No, cancelar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================== -->
   <!-- MODAL: REGISTRAR MOVIMIENTO DE DINERO                          -->
   <!-- ============================================================== -->
   <div id="modalMovimientoDinero" class="fixed inset-0 z-50 bg-black/85 backdrop-blur-md hidden items-center justify-center p-4">
@@ -1965,6 +2035,6 @@
   </nav>
 
   <!-- Application Logic -->
-  <script src="app.js?v=20260904_04"></script>
+  <script src="app.js?v=20260906_01"></script>
 </body>
 </html>

@@ -373,7 +373,8 @@ function calcularStockDetalladoPorCodigo() {
       if (!cod) return;
       if (!detalle[cod]) detalle[cod] = { Carlos: 0, Daniel: 0, total: 0 };
       const cant = parseNum(i.cantidad, 0);
-      if (vend === "Daniel") {
+      const vendInv = String(i.inventarioVendedor || vend).trim();
+      if (vendInv === "Daniel") {
         detalle[cod].Daniel -= cant;
       } else {
         detalle[cod].Carlos -= cant;
@@ -726,6 +727,15 @@ function renderizarDashboard() {
             <div class="text-[11px] text-slate-400 font-mono">
               ${fecha} • ${v.nombre ? `${v.nombre} (${v.cantidad || 1}x)` : `${v.items ? v.items.length : 1} prod(s)`} <span class="text-[10px] text-slate-500">(${v.metodoPago || "Efectivo"})</span>
             </div>
+            ${v.items && v.items.some(it => it.inventarioVendedor && it.inventarioVendedor !== vend) ? `
+              <div class="mt-1 flex flex-wrap gap-1">
+                ${v.items.filter(it => it.inventarioVendedor && it.inventarioVendedor !== vend).map(it => `
+                  <span class="text-[9px] font-bold px-1.5 py-0.2 rounded border bg-amber-950/70 border-amber-500/40 text-amber-300">
+                    📦 ${it.cantidad}x ${it.nombre || it.codigo}: Stock de ${it.inventarioVendedor}
+                  </span>
+                `).join('')}
+              </div>
+            ` : ''}
             ${envioCRC > 0 ? `
               <div class="text-[10px] text-amber-300 font-mono mt-1 bg-amber-950/60 border border-amber-500/40 rounded px-1.5 py-0.5 inline-flex items-center gap-1">
                 <span>🚚</span>
@@ -3431,7 +3441,64 @@ function filtrarPosProductos() {
   dropdown.classList.remove("hidden");
 }
 
-function agregarAlCarritoPorCodigo(codigo) {
+// Variable temporal para recordar la acción pendiente del modal de inventario cruzado
+let accionPendienteInvCruzado = null;
+
+function cerrarModalInventarioCruzado() {
+  const modal = document.getElementById("modalInventarioCruzado");
+  if (modal) {
+    modal.classList.add("hidden");
+    modal.classList.remove("flex");
+  }
+  accionPendienteInvCruzado = null;
+}
+
+function abrirModalAlertaInventarioCruzado({ vendedorActual, otroVendedor, prod, stockActual, stockOtro, alAceptar }) {
+  const modal = document.getElementById("modalInventarioCruzado");
+  if (!modal) return;
+
+  const prodNombreEl = document.getElementById("modalInvCruzadoProducto");
+  const subtituloEl = document.getElementById("modalInvCruzadoSubtitulo");
+  const labelSinEl = document.getElementById("modalInvCruzadoLabelVendedorSin");
+  const stockSinEl = document.getElementById("modalInvCruzadoStockSin");
+  const labelConEl = document.getElementById("modalInvCruzadoLabelVendedorCon");
+  const stockConEl = document.getElementById("modalInvCruzadoStockCon");
+  const mensajeEl = document.getElementById("modalInvCruzadoMensaje");
+  const btnAceptarTextoEl = document.getElementById("modalInvCruzadoBtnAceptarTexto");
+  const btnAceptarEl = document.getElementById("modalInvCruzadoBtnAceptar");
+
+  if (prodNombreEl) prodNombreEl.textContent = prod.nombre || prod.codigo;
+  if (subtituloEl) subtituloEl.textContent = `${otroVendedor} sí tiene stock disponible`;
+  if (labelSinEl) labelSinEl.textContent = `Stock ${vendedorActual}:`;
+  if (stockSinEl) stockSinEl.textContent = `${stockActual} unidad(es)`;
+  if (labelConEl) labelConEl.textContent = `Stock ${otroVendedor}:`;
+  if (stockConEl) stockConEl.textContent = `${stockOtro} unidad(es) disponible(s)`;
+
+  if (mensajeEl) {
+    mensajeEl.innerHTML = `⚠️ <b>${vendedorActual} no tiene inventario</b> de este producto, pero <b>${otroVendedor} sí tiene ${stockOtro} unidad(es)</b>.<br><br>¿Quieres agregar este producto con el inventario de <b>${otroVendedor}</b>?`;
+  }
+
+  if (btnAceptarTextoEl) {
+    btnAceptarTextoEl.textContent = `Sí, agregar con inventario de ${otroVendedor}`;
+  }
+
+  accionPendienteInvCruzado = () => {
+    cerrarModalInventarioCruzado();
+    if (typeof alAceptar === "function") alAceptar();
+  };
+
+  if (btnAceptarEl) {
+    btnAceptarEl.onclick = () => {
+      if (accionPendienteInvCruzado) accionPendienteInvCruzado();
+    };
+  }
+
+  modal.classList.remove("hidden");
+  modal.classList.add("flex");
+  inicializarIconos();
+}
+
+function agregarAlCarritoPorCodigo(codigo, forzarInventarioVendedor = null) {
   const codNorm = String(codigo).trim().toUpperCase();
   const prod = state.productos[codNorm] || state.productos[codigo];
   if (!prod) {
@@ -3439,10 +3506,45 @@ function agregarAlCarritoPorCodigo(codigo) {
     return;
   }
 
-  const stockMap = calcularStockPorCodigo();
-  const stockDisponible = stockMap[codNorm] !== undefined ? stockMap[codNorm] : (stockMap[codigo] || 0);
+  const vendedorActual = state.vendedorActual || "Carlos";
+  const otroVendedor = vendedorActual === "Carlos" ? "Daniel" : "Carlos";
+  const stockDetallado = calcularStockDetalladoPorCodigo();
+  const stockActualVendedor = stockDetallado[codNorm] ? (stockDetallado[codNorm][vendedorActual] || 0) : 0;
+  const stockOtroVendedor = stockDetallado[codNorm] ? (stockDetallado[codNorm][otroVendedor] || 0) : 0;
 
-  const enCarrito = state.carrito.find(item => String(item.codigo).trim().toUpperCase() === codNorm);
+  // Si no se ha forzado el inventario y estamos en perfil individual (Carlos o Daniel)
+  // y el vendedor actual NO tiene stock pero el otro vendedor SÍ tiene stock:
+  if (!forzarInventarioVendedor && vendedorActual !== "Consolidado") {
+    // Revisar cuánto ya tiene tomado en el carrito de su propio stock
+    const enCarritoPropio = state.carrito.filter(item => 
+      String(item.codigo).trim().toUpperCase() === codNorm && 
+      (item.inventarioVendedor === vendedorActual || (!item.inventarioVendedor && vendedorActual !== "Consolidado"))
+    ).reduce((sum, it) => sum + it.cantidad, 0);
+
+    const stockRestantePropio = stockActualVendedor - enCarritoPropio;
+
+    if (stockRestantePropio <= 0 && stockOtroVendedor > 0) {
+      abrirModalAlertaInventarioCruzado({
+        vendedorActual,
+        otroVendedor,
+        prod,
+        stockActual: stockActualVendedor,
+        stockOtro: stockOtroVendedor,
+        alAceptar: () => {
+          agregarAlCarritoPorCodigo(codigo, otroVendedor);
+        }
+      });
+      return;
+    }
+  }
+
+  const invVendedorAsignado = forzarInventarioVendedor || (vendedorActual === "Consolidado" ? "Carlos" : vendedorActual);
+
+  // Buscar si ya existe un ítem en el carrito con el mismo código y el MISMO inventarioVendedor
+  const enCarrito = state.carrito.find(item => 
+    String(item.codigo).trim().toUpperCase() === codNorm &&
+    (item.inventarioVendedor === invVendedorAsignado)
+  );
 
   if (enCarrito) {
     enCarrito.cantidad += 1;
@@ -3461,11 +3563,14 @@ function agregarAlCarritoPorCodigo(codigo) {
       costoRefUSD: Number(prod.costoRefUSD || 0),
       costoRefCRC: Number(prod.costoRefCRC || 0),
       cantidad: 1,
-      stockMaximo: stockDisponible
+      stockMaximo: forzarInventarioVendedor ? stockOtroVendedor : stockActualVendedor,
+      inventarioVendedor: invVendedorAsignado
     });
   }
 
-  if (stockDisponible <= 0) {
+  if (forzarInventarioVendedor) {
+    mostrarToast(`Agregado con inventario de ${forzarInventarioVendedor}: ${prod.nombre} 📦`, "success");
+  } else if (stockActualVendedor <= 0) {
     mostrarToast(`Agregado: ${prod.nombre} (⚠️ Sin stock registrado).`, "info");
   } else {
     mostrarToast(`Agregado: ${prod.nombre}.`, "success");
@@ -3481,21 +3586,57 @@ function agregarAlCarritoPorCodigo(codigo) {
   }
   renderizarCarrito();
 }
-function modificarCantidadCarrito(codigo, delta) {
-  const item = state.carrito.find(i => i.codigo === codigo);
+
+function modificarCantidadCarrito(codigo, delta, inventarioVendedor = null) {
+  // Buscar ítem por código e inventarioVendedor si fue provisto
+  const item = state.carrito.find(i => 
+    i.codigo === codigo && (!inventarioVendedor || i.inventarioVendedor === inventarioVendedor)
+  ) || state.carrito.find(i => i.codigo === codigo);
+
   if (!item) return;
+
+  const codNorm = String(codigo).trim().toUpperCase();
+  const vendedorActual = state.vendedorActual || "Carlos";
+  const otroVendedor = vendedorActual === "Carlos" ? "Daniel" : "Carlos";
+  const stockDetallado = calcularStockDetalladoPorCodigo();
+  const stockActualVendedor = stockDetallado[codNorm] ? (stockDetallado[codNorm][vendedorActual] || 0) : 0;
+  const stockOtroVendedor = stockDetallado[codNorm] ? (stockDetallado[codNorm][otroVendedor] || 0) : 0;
+
+  // Si el usuario quiere AUMENTAR (+) y el stock propio ya está agotado pero el otro vendedor sí tiene stock:
+  if (delta > 0 && item.inventarioVendedor === vendedorActual && vendedorActual !== "Consolidado") {
+    const totalTomado = state.carrito.filter(it => 
+      String(it.codigo).trim().toUpperCase() === codNorm && it.inventarioVendedor === vendedorActual
+    ).reduce((sum, it) => sum + it.cantidad, 0);
+
+    if (totalTomado >= stockActualVendedor && stockOtroVendedor > 0) {
+      const prod = state.productos[codNorm] || { codigo, nombre: item.nombre };
+      abrirModalAlertaInventarioCruzado({
+        vendedorActual,
+        otroVendedor,
+        prod,
+        stockActual: stockActualVendedor,
+        stockOtro: stockOtroVendedor,
+        alAceptar: () => {
+          agregarAlCarritoPorCodigo(codigo, otroVendedor);
+        }
+      });
+      return;
+    }
+  }
 
   const nuevo = item.cantidad + delta;
   if (nuevo <= 0) {
-    eliminarDelCarrito(codigo);
+    eliminarDelCarrito(codigo, item.inventarioVendedor);
     return;
   }
   item.cantidad = nuevo;
   renderizarCarrito();
 }
 
-function eliminarDelCarrito(codigo) {
-  state.carrito = state.carrito.filter(i => i.codigo !== codigo);
+function eliminarDelCarrito(codigo, inventarioVendedor = null) {
+  state.carrito = state.carrito.filter(i => 
+    !(i.codigo === codigo && (!inventarioVendedor || i.inventarioVendedor === inventarioVendedor))
+  );
   renderizarCarrito();
 }
 
@@ -3624,12 +3765,21 @@ function renderizarCarrito() {
         ? 'text-amber-300 font-bold bg-amber-500/20 border-amber-500/40 hover:bg-amber-500/30' 
         : 'text-slate-400 bg-slate-800/80 border-slate-700/60 hover:text-amber-300 hover:bg-slate-750';
 
+      const vendBadge = item.inventarioVendedor ? `
+        <span class="text-[9px] font-bold px-1.5 py-0.5 rounded border ${item.inventarioVendedor === 'Daniel' ? 'text-violet-300 bg-violet-950/80 border-violet-500/40' : 'text-blue-300 bg-blue-950/80 border-blue-500/40'}">
+          📦 Stock ${item.inventarioVendedor}
+        </span>
+      ` : '';
+
       return `
         <div class="p-2.5 bg-slate-900/90 rounded-xl border border-slate-800 flex items-center justify-between gap-2">
           <div class="flex items-center gap-2.5 min-w-0 flex-1">
             ${imgHtml}
             <div class="min-w-0 flex-1">
-              <h5 class="text-xs font-bold text-white truncate">${item.nombre}</h5>
+              <div class="flex items-center gap-1.5 flex-wrap">
+                <h5 class="text-xs font-bold text-white truncate">${item.nombre}</h5>
+                ${vendBadge}
+              </div>
               ${esModoPedido ? `
                 <div class="text-[10px] text-amber-400 font-mono">Encargo: <b class="text-white">${item.cantidad} botella(s)</b></div>
               ` : `
@@ -3642,9 +3792,9 @@ function renderizarCarrito() {
           </div>
 
           <div class="flex items-center gap-1.5 bg-slate-800 rounded-lg p-1">
-            <button onclick="modificarCantidadCarrito('${item.codigo}', -1)" class="w-6 h-6 rounded bg-slate-700 text-white font-bold text-xs flex items-center justify-center active:scale-95">-</button>
+            <button onclick="modificarCantidadCarrito('${item.codigo}', -1, '${item.inventarioVendedor || ''}')" class="w-6 h-6 rounded bg-slate-700 text-white font-bold text-xs flex items-center justify-center active:scale-95">-</button>
             <span class="text-xs font-bold text-white w-5 text-center font-mono">${item.cantidad}</span>
-            <button onclick="modificarCantidadCarrito('${item.codigo}', 1)" class="w-6 h-6 rounded bg-slate-700 text-white font-bold text-xs flex items-center justify-center active:scale-95">+</button>
+            <button onclick="modificarCantidadCarrito('${item.codigo}', 1, '${item.inventarioVendedor || ''}')" class="w-6 h-6 rounded bg-slate-700 text-white font-bold text-xs flex items-center justify-center active:scale-95">+</button>
           </div>
 
           <div class="text-right min-w-[60px] font-mono">
@@ -3653,7 +3803,7 @@ function renderizarCarrito() {
             ` : `
               <div class="text-xs font-black text-emerald-400">${fmtCRC(item.cantidad * item.precioVentaCRC)}</div>
             `}
-            <button onclick="eliminarDelCarrito('${item.codigo}')" class="text-[10px] text-rose-400 hover:text-rose-300 block ml-auto">Quitar</button>
+            <button onclick="eliminarDelCarrito('${item.codigo}', '${item.inventarioVendedor || ''}')" class="text-[10px] text-rose-400 hover:text-rose-300 block ml-auto">Quitar</button>
           </div>
         </div>
       `;
@@ -3800,7 +3950,8 @@ async function completarVenta() {
         subtotalCRC: cant * pCRC,
         subtotalUSD: cant * pUSD,
         _precioEditado: !!it._precioEditado,
-        precioOriginalCRC: it.precioOriginalCRC !== undefined ? it.precioOriginalCRC : pCRC
+        precioOriginalCRC: it.precioOriginalCRC !== undefined ? it.precioOriginalCRC : pCRC,
+        inventarioVendedor: it.inventarioVendedor || vendedor
       };
     }),
     totalCRC: totalBrutoCRC,
