@@ -652,7 +652,9 @@ function renderizarDashboard() {
   document.getElementById("dashProdsConStock").textContent = `${prodsConStock} de ${Object.keys(state.productos).length}`;
 
   // --- Resumen de Cuentas Pendientes en Dashboard (Por Cobrar y Por Pagar) filtradas por vista ---
-  let totCobrarCRC = 0;
+  let totCobrarBrutoCRC = 0;
+  let totCobrarNetoCRC = 0;
+  let totEnvioCxcCRC = 0;
   let totPagarCRC = 0;
   (state.cuentas || []).forEach(cta => {
     if (vista !== "Consolidado") {
@@ -662,9 +664,10 @@ function renderizarDashboard() {
     const saldo = parseNum(cta.saldoPendienteCRC, 0);
     if ((cta.estado || "Pendiente") !== "Pagado" && saldo > 0) {
       if (cta.tipo === "Por Cobrar") {
-        // Usar valor neto real (venta - envío) para el dashboard interno
         const datosEnv = obtenerDatosEnvioCuenta(cta);
-        totCobrarCRC += datosEnv.valorNetoCRC;
+        totCobrarBrutoCRC += datosEnv.valorClienteCRC;
+        totCobrarNetoCRC += datosEnv.valorNetoCRC;
+        totEnvioCxcCRC += datosEnv.envioPendienteCRC;
       } else {
         totPagarCRC += saldo;
       }
@@ -672,8 +675,17 @@ function renderizarDashboard() {
   });
 
   const dashCobrarEl = document.getElementById("dashCobrarCRC");
+  const dashCobrarNetoEl = document.getElementById("dashCobrarNetoSub");
   const dashPagarEl = document.getElementById("dashPagarCRC");
-  if (dashCobrarEl) dashCobrarEl.textContent = fmtCRC(totCobrarCRC);
+
+  if (dashCobrarEl) dashCobrarEl.textContent = fmtCRC(totCobrarBrutoCRC);
+  if (dashCobrarNetoEl) {
+    if (totEnvioCxcCRC > 0) {
+      dashCobrarNetoEl.innerHTML = `<span class="text-slate-400">Neto sin envíos:</span> <b class="text-emerald-300 font-mono">${fmtCRC(totCobrarNetoCRC)}</b>`;
+    } else {
+      dashCobrarNetoEl.innerHTML = "";
+    }
+  }
   if (dashPagarEl) dashPagarEl.textContent = fmtCRC(totPagarCRC);
 
   // --- Pedidos Pendientes de Clientes (filtrados por vista) ---
@@ -1786,10 +1798,10 @@ function renderizarCuentas() {
   const elCobrarCRC = document.getElementById("cuentasTotalCobrarCRC");
   const elCobrarUSD = document.getElementById("cuentasTotalCobrarUSD");
   const elBadgeCobrar = document.getElementById("badgeCuentasCobrar");
-  if (elCobrarCRC) elCobrarCRC.textContent = fmtCRC(totCobrarNetoCRC);
+  if (elCobrarCRC) elCobrarCRC.textContent = fmtCRC(totCobrarBrutoClienteCRC);
   if (elCobrarUSD) {
     if (totalEnvioEnCxcCRC > 0) {
-      elCobrarUSD.innerHTML = `<span>${fmtUSD(totCobrarNetoUSD)}</span><span class="block text-[9px] text-slate-400 font-normal">Bruto: ${fmtCRC(totCobrarBrutoClienteCRC)} | Envío: -${fmtCRC(totalEnvioEnCxcCRC)}</span>`;
+      elCobrarUSD.innerHTML = `<span>${fmtUSD(totCobrarBrutoClienteCRC / (Number(state.config.tipoCambio) || 520))}</span><span class="block text-[9px] text-slate-400 font-normal">Neto sin envíos: <b class="text-emerald-300">${fmtCRC(totCobrarNetoCRC)}</b> (Envío: -${fmtCRC(totalEnvioEnCxcCRC)})</span>`;
     } else {
       elCobrarUSD.textContent = fmtUSD(totCobrarNetoUSD);
     }
@@ -1806,11 +1818,42 @@ function renderizarCuentas() {
   const elCountTotal = document.getElementById("cuentasCountTotal");
   if (elCountTotal) elCountTotal.textContent = state.cuentas.length;
 
-  // Actualizar widget en Dashboard
+  // Actualizar widget en Dashboard respetando la vista seleccionada
+  const vistaActual = state.vistaVendedor || "Consolidado";
+  let dashBrutoCRC = 0;
+  let dashNetoCRC = 0;
+  let dashEnvioCRC = 0;
+  let dashPagarCRC = 0;
+  state.cuentas.forEach(cta => {
+    if (vistaActual !== "Consolidado") {
+      const vendCta = String(cta.vendedor || cta.socio || cta.registradoPor || "Carlos").trim();
+      if (vendCta !== vistaActual) return;
+    }
+    const saldo = parseNum(cta.saldoPendienteCRC, 0);
+    if ((cta.estado || "Pendiente") !== "Pagado" && saldo > 0) {
+      if (cta.tipo === "Por Cobrar") {
+        const datosEnv = obtenerDatosEnvioCuenta(cta);
+        dashBrutoCRC += datosEnv.valorClienteCRC;
+        dashNetoCRC += datosEnv.valorNetoCRC;
+        dashEnvioCRC += datosEnv.envioPendienteCRC;
+      } else {
+        dashPagarCRC += saldo;
+      }
+    }
+  });
+
   const dashCobrar = document.getElementById("dashCobrarCRC");
+  const dashCobrarNetoSub = document.getElementById("dashCobrarNetoSub");
   const dashPagar = document.getElementById("dashPagarCRC");
-  if (dashCobrar) dashCobrar.textContent = fmtCRC(totCobrarNetoCRC);
-  if (dashPagar) dashPagar.textContent = fmtCRC(totPagarCRC);
+  if (dashCobrar) dashCobrar.textContent = fmtCRC(dashBrutoCRC);
+  if (dashCobrarNetoSub) {
+    if (dashEnvioCRC > 0) {
+      dashCobrarNetoSub.innerHTML = `<span class="text-slate-400">Neto sin envíos:</span> <b class="text-emerald-300 font-mono">${fmtCRC(dashNetoCRC)}</b>`;
+    } else {
+      dashCobrarNetoSub.innerHTML = "";
+    }
+  }
+  if (dashPagar) dashPagar.textContent = fmtCRC(dashPagarCRC);
 
   // Filtrar lista para mostrar según la pestaña seleccionada
   let lista = state.cuentas.filter(cta => {
