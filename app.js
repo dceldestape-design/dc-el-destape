@@ -765,6 +765,23 @@ function renderizarDashboard() {
                 <span>En factura <b>${v.id || 'N/A'}</b> se pagó el monto de flete o envío: <b>${fmtCRC(envioCRC)}</b>${envioUSD > 0 ? ` (${fmtUSD(envioUSD)})` : ''}</span>
               </div>
             ` : ''}
+            ${v.pedidoOrigenId ? `
+              <div class="mt-1 flex flex-wrap gap-1">
+                <span class="text-[9px] font-bold px-1.5 py-0.5 rounded border bg-sky-950/70 border-sky-500/40 text-sky-300">
+                  📋 Pedido: ${v.pedidoOrigenId}
+                </span>
+                ${v.pedidoOrigenVendedor ? `
+                  <span class="text-[9px] font-bold px-1.5 py-0.5 rounded border bg-indigo-950/70 border-indigo-500/40 text-indigo-300">
+                    🙋 Tomó: ${v.pedidoOrigenVendedor}
+                  </span>
+                ` : ''}
+                ${v.facturadoPor && v.facturadoPor !== v.vendedor ? `
+                  <span class="text-[9px] font-bold px-1.5 py-0.5 rounded border bg-emerald-950/70 border-emerald-500/40 text-emerald-300">
+                    🧾 Facturó: ${v.facturadoPor}
+                  </span>
+                ` : ''}
+              </div>
+            ` : ''}
           </div>
           <div class="text-right font-mono shrink-0 space-y-0.5">
             <div class="text-xs font-black text-emerald-400">${fmtCRC(totCRC)}</div>
@@ -4341,6 +4358,24 @@ function abrirModalRecibo(venta, esPedido = false) {
     `).join("");
   }
 
+  // --- Trazabilidad de pedido preventa ---
+  const trazCont = document.getElementById("reciboTrazabilidad");
+  if (trazCont) {
+    if (!esPedido && venta.pedidoOrigenId) {
+      trazCont.classList.remove("hidden");
+      trazCont.innerHTML = `
+        <div class="mt-2 pt-2 border-t border-gray-200 text-[11px] text-gray-500 space-y-0.5">
+          <div class="font-bold text-gray-600 mb-0.5">📋 Trazabilidad de Encargo Preventa</div>
+          <div>Pedido origen: <b class="text-gray-800">${venta.pedidoOrigenId}</b></div>
+          ${venta.pedidoOrigenVendedor ? `<div>Tomó el pedido: <b class="text-gray-800">${venta.pedidoOrigenVendedor}</b></div>` : ''}
+          ${venta.facturadoPor ? `<div>Facturó: <b class="text-gray-800">${venta.facturadoPor}</b></div>` : ''}
+        </div>`;
+    } else {
+      trazCont.classList.add("hidden");
+      trazCont.innerHTML = "";
+    }
+  }
+
   modal.classList.remove("hidden");
   modal.classList.add("flex");
   inicializarIconos();
@@ -4367,7 +4402,11 @@ function compartirReciboWhatsApp() {
   texto += esPedido ? `📋 *COMPROBANTE DE ENCARGO*\n` : `🧾 *COMPROBANTE DE COMPRA*\n`;
   texto += `📅 Fecha: ${fecha}\n`;
   texto += `🎫 N°: ${v.id}\n`;
-  texto += `👤 Atendido por: ${vendedor}\n`;
+  texto += `👤 Facturado por: ${v.facturadoPor || vendedor}\n`;
+  if (v.pedidoOrigenId) {
+    texto += `📋 Pedido preventa: ${v.pedidoOrigenId}\n`;
+    if (v.pedidoOrigenVendedor) texto += `🙋 Tomó pedido: ${v.pedidoOrigenVendedor}\n`;
+  }
   texto += `👤 Cliente: ${v.cliente || "General"}\n`;
   texto += `--------------------------------\n`;
   
@@ -4704,11 +4743,18 @@ function obtenerListaVentasConsolidadas() {
         totalUSD: 0,
         costoEnvioCRC: 0,
         costoEnvioUSD: 0,
+        facturadoPor: v.facturadoPor || "",
+        pedidoOrigenId: v.pedidoOrigenId || "",
+        pedidoOrigenVendedor: v.pedidoOrigenVendedor || "",
         itemsSummary: []
       });
     }
 
     const sale = map.get(id);
+    if (!sale.facturadoPor && v.facturadoPor) sale.facturadoPor = v.facturadoPor;
+    if (!sale.pedidoOrigenId && v.pedidoOrigenId) sale.pedidoOrigenId = v.pedidoOrigenId;
+    if (!sale.pedidoOrigenVendedor && v.pedidoOrigenVendedor) sale.pedidoOrigenVendedor = v.pedidoOrigenVendedor;
+
     const envCRC = parseNum(v.costoEnvioCRC, 0);
     const envUSD = parseNum(v.costoEnvioUSD, 0);
     if (envCRC > sale.costoEnvioCRC) sale.costoEnvioCRC = envCRC;
@@ -4764,6 +4810,11 @@ function renderizarHistorialFinanzas() {
     const montoNetoCRC = Math.max(0, v.totalCRC - envioCRC);
     const montoNetoUSD = Math.max(0, v.totalUSD - envioUSD);
 
+    let extraTraz = "";
+    if (v.pedidoOrigenId) {
+      extraTraz = ` • Pedido: ${v.pedidoOrigenId}${v.pedidoOrigenVendedor ? ` (${v.pedidoOrigenVendedor})` : ''}`;
+    }
+
     return {
       origen: 'venta',
       id: v.id,
@@ -4779,8 +4830,8 @@ function renderizarHistorialFinanzas() {
       costoEnvioCRC: envioCRC,
       costoEnvioUSD: envioUSD,
       metodoPago: v.metodoPago || "Efectivo",
-      notas: `${v.itemsSummary.join(", ")}${v.cliente && v.cliente !== 'Cliente General' ? ` • Cl: ${v.cliente}` : ''}`,
-      registradoPor: v.vendedor || "Carlos"
+      notas: `${v.itemsSummary.join(", ")}${v.cliente && v.cliente !== 'Cliente General' ? ` • Cl: ${v.cliente}` : ''}${extraTraz}`,
+      registradoPor: v.facturadoPor || v.vendedor || "Carlos"
     };
   });
 
@@ -5652,7 +5703,10 @@ async function _descargarDatosSheets(mostrarMensaje = false) {
             totalUSD: parseNum(v.totalUSD, 0),
             totalCRC: parseNum(v.totalCRC, 0),
             costoEnvioCRC: parseNum(v.costoEnvioCRC, 0),
-            costoEnvioUSD: parseNum(v.costoEnvioUSD, 0)
+            costoEnvioUSD: parseNum(v.costoEnvioUSD, 0),
+            facturadoPor: String(v.facturadoPor || "").trim(),
+            pedidoOrigenId: String(v.pedidoOrigenId || "").trim(),
+            pedidoOrigenVendedor: String(v.pedidoOrigenVendedor || "").trim()
           };
         }) : [];
         guardarVentasLocal();
