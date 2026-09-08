@@ -800,9 +800,15 @@ function renderizarConsolidadoPedidosDashboard() {
   if (!container || !consolidadoLista || !pedidosList) return;
 
   const vista = state.vistaVendedor || "Consolidado";
+  const vendedoresPropios = ["Carlos", "Daniel"]; // Vendedores de la app principal
   let pedidosPendientes = (state.pedidos || []).filter(p => p.estado === "pendiente" || !p.estado);
   if (vista !== "Consolidado") {
-    pedidosPendientes = pedidosPendientes.filter(p => String(p.vendedor || "Carlos").trim() === vista);
+    // Mostrar: pedidos del vendedor seleccionado + pedidos de colaboradores externos (preventa)
+    // Los pedidos externos siempre se muestran para que Carlos/Daniel los puedan atender
+    pedidosPendientes = pedidosPendientes.filter(p => {
+      const vend = String(p.vendedor || "Carlos").trim();
+      return vend === vista || !vendedoresPropios.includes(vend);
+    });
   }
 
   if (pedidosPendientes.length === 0) {
@@ -853,37 +859,58 @@ function renderizarConsolidadoPedidosDashboard() {
 
   // 2. Renderizar lista detallada de pedidos por cliente
   pedidosList.innerHTML = pedidosPendientes.map(ped => {
-    const fecha = ped.fecha ? new Date(ped.fecha).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : "";
-    const itemsResumen = (ped.items || []).map(i => `${i.cantidad}x ${i.nombre}`).join(", ");
+    const fecha = ped.fecha ? new Date(ped.fecha).toLocaleDateString("es-CR", { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : "";
+    const itemsLineas = (ped.items || []).map(i => `<div class="flex justify-between"><span>${i.cantidad}x ${i.nombre}</span></div>`).join("");
     let totalBotellasPed = 0;
     (ped.items || []).forEach(i => totalBotellasPed += Number(i.cantidad || 1));
+    const vendedoresPropios = ["Carlos", "Daniel"];
+    const esExterno = !vendedoresPropios.includes(String(ped.vendedor || "Carlos").trim());
 
     return `
-      <div class="p-2.5 bg-slate-950/70 border border-slate-800 rounded-xl flex items-center justify-between gap-2.5">
-        <div class="min-w-0 flex-1">
-          <div class="flex items-center gap-1.5 mb-0.5">
-            <span class="text-xs font-bold text-white truncate">${ped.cliente || 'Cliente General'}</span>
-            ${ped.clienteTelefono ? `<span class="text-[10px] text-amber-400/90 font-mono">(${ped.clienteTelefono})</span>` : ''}
-            <span class="text-[9px] text-slate-400 bg-slate-900 px-1.5 py-0.2 rounded border border-slate-800 font-mono">${fecha}</span>
+      <div class="bg-slate-950/70 border border-slate-800 rounded-xl overflow-hidden">
+        <!-- Cabecera: Cliente + Fecha -->
+        <div class="px-3 pt-2.5 pb-1.5 flex items-start justify-between gap-2 border-b border-slate-800/60">
+          <div class="min-w-0">
+            <span class="text-sm font-bold text-white block leading-tight">${ped.cliente || 'Cliente General'}</span>
+            ${ped.clienteTelefono ? `<span class="text-[11px] text-amber-400/80 font-mono">📞 ${ped.clienteTelefono}</span>` : ''}
           </div>
-          <p class="text-[11px] text-slate-300 font-mono truncate leading-tight">${itemsResumen}</p>
-          <div class="text-[10px] text-amber-400 font-mono mt-0.5">
-            Total botellas: <b class="text-white">${totalBotellasPed} unids</b> • Anotó: ${ped.vendedor || 'Carlos'}
-          </div>
+          <span class="text-[10px] text-slate-400 bg-slate-900 px-2 py-1 rounded-lg border border-slate-800 font-mono shrink-0 text-right leading-tight">${fecha}</span>
         </div>
 
-        <div class="flex items-center gap-1 shrink-0">
-          <button type="button" onclick="marcarPedidoComprado('${ped.id}')" title="Marcar como ya comprado al proveedor" class="px-2.5 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 font-bold text-[11px] rounded-lg active:scale-95 transition-all flex items-center gap-1">
+        <!-- Ítems -->
+        <div class="px-3 py-2 text-[11px] text-slate-300 font-mono space-y-0.5 border-b border-slate-800/60">
+          ${itemsLineas}
+        </div>
+
+        <!-- Totales + Quién anotó -->
+        <div class="px-3 py-1.5 flex items-center justify-between border-b border-slate-800/60">
+          <span class="text-[11px] text-amber-400 font-mono">
+            Total: <b class="text-white">${totalBotellasPed} unids</b>
+          </span>
+          <span class="text-[10px] font-mono ${esExterno ? 'text-sky-400' : 'text-slate-400'}">
+            ${esExterno ? '🔗 Preventa: ' : 'Anotó: '}<b>${ped.vendedor || 'Carlos'}</b>
+          </span>
+        </div>
+
+        <!-- Botones de acción -->
+        <div class="px-3 py-2 flex items-center gap-2">
+          <button type="button" onclick="facturarPedido('${ped.id}')" class="flex-1 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/50 text-amber-300 font-bold text-[11px] rounded-lg active:scale-95 transition-all flex items-center justify-center gap-1.5">
+            <i data-lucide="receipt" class="w-3.5 h-3.5"></i>
+            <span>Facturar</span>
+          </button>
+          <button type="button" onclick="marcarPedidoComprado('${ped.id}')" class="flex-1 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 font-bold text-[11px] rounded-lg active:scale-95 transition-all flex items-center justify-center gap-1.5">
             <i data-lucide="check" class="w-3.5 h-3.5"></i>
             <span>Comprado</span>
           </button>
-          <button type="button" onclick="cancelarPedido('${ped.id}')" title="Cancelar pedido" class="p-1.5 text-slate-500 hover:text-rose-400 rounded-lg active:scale-95 transition-all">
-            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+          <button type="button" onclick="cancelarPedido('${ped.id}')" title="Cancelar pedido" class="p-1.5 text-slate-500 hover:text-rose-400 rounded-lg active:scale-95 transition-all shrink-0">
+            <i data-lucide="trash-2" class="w-4 h-4"></i>
           </button>
         </div>
       </div>
     `;
   }).join("");
+
+
 
   inicializarIconos();
 }
@@ -963,6 +990,87 @@ function cancelarPedido(idPedido) {
 
   // Encolar y sincronizar con Google Sheets
   encolarAccionSincronizacion("eliminarPedido", { id: idPedido });
+}
+
+// ==========================================================================
+// FACTURAR PEDIDO: Carga el pedido en el TPV y navega a Ventas
+// ==========================================================================
+function facturarPedido(idPedido) {
+  const ped = (state.pedidos || []).find(p => p.id === idPedido);
+  if (!ped) {
+    mostrarToast("Pedido no encontrado.", "error");
+    return;
+  }
+
+  // 1. Limpiar carrito actual
+  state.carrito = [];
+  state.clienteSeleccionado = null;
+  state.descuentoPuntosAplicado = 0;
+
+  // 2. Precargar ítems del pedido en el carrito
+  const vendedorActual = state.vendedorActual || "Carlos";
+  let algunoNoEncontrado = false;
+
+  (ped.items || []).forEach(item => {
+    const codNorm = String(item.codigo || "").trim().toUpperCase();
+    const prod = state.productos[codNorm] || state.productos[item.codigo];
+    if (!prod) {
+      algunoNoEncontrado = true;
+      return;
+    }
+    const pCRC = Number(prod.precioVentaCRC || 0);
+    const pUSD = Number(prod.precioVentaUSD || 0);
+    const cant = Number(item.cantidad || 1);
+    const existing = state.carrito.find(c => String(c.codigo).trim().toUpperCase() === codNorm);
+    if (existing) {
+      existing.cantidad += cant;
+    } else {
+      state.carrito.push({
+        codigo: prod.codigo,
+        nombre: prod.nombre,
+        imagenUrl: prod.imagenUrl || "",
+        precioVentaCRC: pCRC,
+        precioCRC: pCRC,
+        precioOriginalCRC: pCRC,
+        precioVentaUSD: pUSD,
+        precioUSD: pUSD,
+        costoRefUSD: Number(prod.costoRefUSD || 0),
+        costoRefCRC: Number(prod.costoRefCRC || 0),
+        cantidad: cant,
+        stockMaximo: 9999,
+        inventarioVendedor: vendedorActual
+      });
+    }
+  });
+
+  // 3. Preseleccionar cliente si existe en el sistema
+  const clienteNombrePed = String(ped.cliente || "").trim().toLowerCase();
+  const clienteEncontrado = Object.values(state.clientes || {}).find(c =>
+    String(c.nombre || "").trim().toLowerCase() === clienteNombrePed
+  );
+  if (clienteEncontrado) {
+    state.clienteSeleccionado = clienteEncontrado;
+  }
+
+  // 4. Guardar referencia al pedido que se está facturando (para trazabilidad al facturar)
+  state.pedidoEnFacturacion = idPedido;
+  state.pedidoOrigenVendedor = String(ped.vendedor || "").trim(); // Quién anotó el pedido original
+
+  // 5. Navegar a la pestaña Ventas
+  cambiarVista("ventas");
+
+  // 6. Actualizar el input del cliente en el TPV
+  const clienteInput = document.getElementById("posClienteInput");
+  if (clienteInput) {
+    clienteInput.value = ped.cliente || "";
+  }
+  renderizarPanelCliente();
+
+  if (algunoNoEncontrado) {
+    mostrarToast(`⚠️ Algunos productos del pedido no se encontraron en el inventario.`, "info");
+  } else {
+    mostrarToast(`✅ Pedido de ${ped.cliente || 'cliente'} cargado en el TPV. Revisá y facturá cuando estés listo.`, "success");
+  }
 }
 
 // ==========================================================================
@@ -1232,7 +1340,8 @@ function guardarCliente(obj) {
     telefono: tel,
     puntos: existente ? (obj.puntos !== undefined ? obj.puntos : existente.puntos) : (obj.puntos || 0),
     fechaRegistro: existente ? existente.fechaRegistro : (obj.fechaRegistro || ahora),
-    ultimaVenta: existente ? existente.ultimaVenta : null
+    ultimaVenta: existente ? existente.ultimaVenta : null,
+    creadoPor: existente ? (existente.creadoPor || "Carlos") : (obj.creadoPor || state.vendedorActual || "Carlos")
   };
 
   state.clientes[id] = clienteObj;
@@ -4021,7 +4130,11 @@ async function completarVenta() {
     metodoPago: state.metodoPagoSeleccionado,
     descuentoPuntos,
     puntosGanados,
-    puntosCanjados
+    puntosCanjados,
+    // --- Trazabilidad de pedidos preventa ---
+    facturadoPor: vendedor,                                           // Quien facturó (Carlos/Daniel)
+    pedidoOrigenId: state.pedidoEnFacturacion || "",                  // ID del pedido original
+    pedidoOrigenVendedor: state.pedidoOrigenVendedor || ""            // Quien tomó el pedido (colaborador)
   };
 
   // --- Actualizar puntos del cliente ---
@@ -4095,6 +4208,20 @@ async function completarVenta() {
   if (document.getElementById("posEnvioCRC")) document.getElementById("posEnvioCRC").value = "0";
   const clienteInput = document.getElementById("posClienteInput");
   if (clienteInput) clienteInput.value = "";
+
+  // --- Auto-completar pedido si se facturó desde un encargo ---
+  if (state.pedidoEnFacturacion) {
+    const idPedOrig = state.pedidoEnFacturacion;
+    state.pedidoEnFacturacion = null;
+    state.pedidoOrigenVendedor = null;
+    const pedOrig = (state.pedidos || []).find(p => p.id === idPedOrig);
+    if (pedOrig) {
+      pedOrig.estado = "comprado";
+      pedOrig.fechaComprado = new Date().toISOString();
+      guardarPedidosLocal();
+      encolarAccionSincronizacion("marcarPedidoComprado", { id: idPedOrig });
+    }
+  }
 
   renderizarTodo();
   renderizarPanelCliente();
