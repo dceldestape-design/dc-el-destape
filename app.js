@@ -3385,13 +3385,57 @@ async function guardarCompra() {
 
 async function eliminarCompra(id) {
   if (!confirm("¿Deseas eliminar este registro de compra?")) return;
-  state.compras = state.compras.filter(c => c.id !== id);
-  guardarComprasLocal();
-  renderizarTodo();
-  mostrarToast("Compra eliminada localmente.", "info");
+  const idStr = String(id).trim();
 
-  // Encolar y sincronizar
-  encolarAccionSincronizacion("eliminarCompra", { id });
+  // 1. Quitar de compras locales para que el stock baje de inmediato
+  state.compras = (state.compras || []).filter(c => String(c.id).trim() !== idStr);
+  guardarComprasLocal();
+
+  // 2. Si la compra estaba pendiente en cola de sincronización para subirse, cancelarla
+  if (state.colaSincronizacion && state.colaSincronizacion.length > 0) {
+    const longitudAntes = state.colaSincronizacion.length;
+    state.colaSincronizacion = state.colaSincronizacion.filter(item => {
+      if (item.accion === "registrarCompra" && item.datos && item.datos.compra) {
+        return String(item.datos.compra.id).trim() !== idStr;
+      }
+      return true;
+    });
+    if (state.colaSincronizacion.length !== longitudAntes) {
+      guardarColaLocal();
+    }
+  }
+
+  // 3. Limpiar cualquier Cuenta por Pagar asociada localmente
+  if (state.cuentas && state.cuentas.length > 0) {
+    const ctasAntes = state.cuentas.length;
+    state.cuentas = state.cuentas.filter(cta => {
+      const ref = String(cta.referenciaId || "").trim();
+      const not = String(cta.notas || "").trim();
+      const esDeEstaCompra = (ref === idStr || ref.includes(idStr) || not.includes(idStr)) && cta.tipo === "Por Pagar";
+      return !esDeEstaCompra;
+    });
+    if (state.cuentas.length !== ctasAntes) {
+      guardarCuentasLocal();
+    }
+  }
+
+  // 4. Recordar ID eliminado en localStorage para evitar que _descargarDatosSheets la reincorpore antes de que Sheets la borre
+  try {
+    let eliminadasRecientes = JSON.parse(localStorage.getItem("inv_compras_eliminadas_ids") || "[]");
+    if (!Array.isArray(eliminadasRecientes)) eliminadasRecientes = [];
+    if (!eliminadasRecientes.includes(idStr)) {
+      eliminadasRecientes.push(idStr);
+      if (eliminadasRecientes.length > 100) eliminadasRecientes = eliminadasRecientes.slice(-100);
+      localStorage.setItem("inv_compras_eliminadas_ids", JSON.stringify(eliminadasRecientes));
+    }
+  } catch(e) {}
+
+  // 5. Renderizar interfaz inmediatamente con el nuevo stock reducido
+  renderizarTodo();
+  mostrarToast("Compra eliminada e inventario descontado.", "info");
+
+  // 6. Encolar y sincronizar con Google Sheets
+  encolarAccionSincronizacion("eliminarCompra", { id: idStr });
 }
 
 function pasarCompraACuentasPorPagar(idCompra) {
@@ -5678,28 +5722,42 @@ async function _descargarDatosSheets(mostrarMensaje = false) {
       // 2. Compras: Reflejar fielmente la hoja Compras de Sheets
       if (json.data.ultimasCompras !== undefined || json.data.compras !== undefined) {
         const rawComps = json.data.ultimasCompras || json.data.compras || [];
-        const comprasServidor = Array.isArray(rawComps) ? rawComps.map(c => {
-          if (!c) return c;
-          return {
-            ...c,
-            codigo: String(c.codigo || "").trim().toUpperCase(),
-            cantidad: parseNum(c.cantidad, 1),
-            costoUnitarioUSD: parseNum(c.costoUnitarioUSD, 0),
-            costoUnitarioCRC: parseNum(c.costoUnitarioCRC, 0),
-            tipoCambio: parseNum(c.tipoCambio, state.config.tipoCambio || 520),
-            totalUSD: parseNum(c.totalUSD, 0),
-            totalCRC: parseNum(c.totalCRC, 0),
-            costoEnvioCRC: parseNum(c.costoEnvioCRC, 0),
-            costoEnvioUSD: parseNum(c.costoEnvioUSD, 0)
-          };
-        }) : [];
 
-        // Asegurar que compras locales pendientes en cola de sincronización no se borren antes de subir
+        // Obtener IDs de compras recientemente eliminadas o en proceso de eliminación
+        let eliminadasRecientes = [];
+        try {
+          eliminadasRecientes = JSON.parse(localStorage.getItem("inv_compras_eliminadas_ids") || "[]");
+        } catch(e) { eliminadasRecientes = []; }
+        const setEliminadas = new Set((Array.isArray(eliminadasRecientes) ? eliminadasRecientes : []).map(x => String(x).trim()));
+
+        // Agregar también cualquier ID pendiente en cola con accion === "eliminarCompra"
+        (state.colaSincronizacion || [])
+          .filter(it => it.accion === "eliminarCompra" && it.datos && it.datos.id)
+          .forEach(it => setEliminadas.add(String(it.datos.id).trim()));
+
+        const comprasServidor = (Array.isArray(rawComps) ? rawComps : [])
+          .filter(c => c && c.id && !setEliminadas.has(String(c.id).trim()))
+          .map(c => {
+            return {
+              ...c,
+              codigo: String(c.codigo || "").trim().toUpperCase(),
+              cantidad: parseNum(c.cantidad, 1),
+              costoUnitarioUSD: parseNum(c.costoUnitarioUSD, 0),
+              costoUnitarioCRC: parseNum(c.costoUnitarioCRC, 0),
+              tipoCambio: parseNum(c.tipoCambio, state.config.tipoCambio || 520),
+              totalUSD: parseNum(c.totalUSD, 0),
+              totalCRC: parseNum(c.totalCRC, 0),
+              costoEnvioCRC: parseNum(c.costoEnvioCRC, 0),
+              costoEnvioUSD: parseNum(c.costoEnvioUSD, 0)
+            };
+          });
+
+        // Asegurar que compras locales pendientes en cola de sincronización no se borren antes de subir (siempre que no hayan sido eliminadas)
         const idsSheets = new Set(comprasServidor.map(c => String(c.id || "").trim()));
         const comprasPendientes = (state.colaSincronizacion || [])
           .filter(it => it.accion === "registrarCompra" && it.datos && it.datos.compra)
           .map(it => it.datos.compra)
-          .filter(c => c && c.id && !idsSheets.has(String(c.id).trim()));
+          .filter(c => c && c.id && !idsSheets.has(String(c.id).trim()) && !setEliminadas.has(String(c.id).trim()));
 
         state.compras = [...comprasPendientes, ...comprasServidor];
         guardarComprasLocal();
