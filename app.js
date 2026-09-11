@@ -5678,7 +5678,7 @@ async function _descargarDatosSheets(mostrarMensaje = false) {
       // 2. Compras: Reflejar fielmente la hoja Compras de Sheets
       if (json.data.ultimasCompras !== undefined || json.data.compras !== undefined) {
         const rawComps = json.data.ultimasCompras || json.data.compras || [];
-        state.compras = Array.isArray(rawComps) ? rawComps.map(c => {
+        const comprasServidor = Array.isArray(rawComps) ? rawComps.map(c => {
           if (!c) return c;
           return {
             ...c,
@@ -5693,6 +5693,15 @@ async function _descargarDatosSheets(mostrarMensaje = false) {
             costoEnvioUSD: parseNum(c.costoEnvioUSD, 0)
           };
         }) : [];
+
+        // Asegurar que compras locales pendientes en cola de sincronización no se borren antes de subir
+        const idsSheets = new Set(comprasServidor.map(c => String(c.id || "").trim()));
+        const comprasPendientes = (state.colaSincronizacion || [])
+          .filter(it => it.accion === "registrarCompra" && it.datos && it.datos.compra)
+          .map(it => it.datos.compra)
+          .filter(c => c && c.id && !idsSheets.has(String(c.id).trim()));
+
+        state.compras = [...comprasPendientes, ...comprasServidor];
         guardarComprasLocal();
       }
 
