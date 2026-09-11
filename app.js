@@ -48,6 +48,8 @@ let state = {
   pedidos: [], // Lista de pedidos / encargos de clientes
   cuentas: [], // Lista de cuentas pendientes (Por Cobrar / Por Pagar)
   anulaciones: [], // Historial informativo de ventas anuladas
+  liquidaciones: [], // Historial de comisiones liquidadas a preventistas
+  filtroPreventaComision: "todos", // "todos" o nombre del preventista
   filtroCuentas: "",
   filtroTipoCuenta: "Por Cobrar", // "Por Cobrar" | "Por Pagar" | "todos"
   modoPOS: "venta", // "venta" | "pedido"
@@ -278,6 +280,11 @@ function cargarEstadoLocal() {
     try { state.anulaciones = JSON.parse(anuls); } catch(e) { state.anulaciones = []; }
   }
 
+  const liqs = localStorage.getItem("inv_liquidaciones_v2");
+  if (liqs) {
+    try { state.liquidaciones = JSON.parse(liqs); } catch(e) { state.liquidaciones = []; }
+  }
+
   const savedVista = localStorage.getItem("inv_vista_vendedor");
   if (savedVista) {
     state.vistaVendedor = savedVista;
@@ -302,6 +309,9 @@ function guardarCuentasLocal() {
 }
 function guardarAnulacionesLocal() {
   localStorage.setItem("inv_anulaciones_v2", JSON.stringify(state.anulaciones));
+}
+function guardarLiquidacionesLocal() {
+  localStorage.setItem("inv_liquidaciones_v2", JSON.stringify(state.liquidaciones || []));
 }
 function guardarFinanzasLocal() {
   localStorage.setItem("inv_finanzas_v2", JSON.stringify(state.movimientosDinero));
@@ -486,7 +496,7 @@ function calcularCostosPorCodigo(vista = state.vistaVendedor) {
 // NAVEGACIÓN Y VISTAS
 // ==========================================================================
 function cambiarVista(vista) {
-  const vistas = ["dashboard", "inventario", "ventas", "compras", "finanzas", "configuracion", "clientes", "cuentas"];
+  const vistas = ["dashboard", "inventario", "ventas", "compras", "finanzas", "configuracion", "clientes", "cuentas", "comisiones"];
   
   vistas.forEach(v => {
     const el = document.getElementById("view" + capitalizar(v));
@@ -511,6 +521,7 @@ function cambiarVista(vista) {
   if (vista === "finanzas") renderizarFinanzas();
   if (vista === "clientes") renderizarClientes();
   if (vista === "cuentas") renderizarCuentas();
+  if (vista === "comisiones") renderizarModuloComisiones();
   if (vista === "configuracion") {
     cargarConfigPuntosUI();
     const surl = document.getElementById("sheetsApiUrl");
@@ -546,6 +557,7 @@ function renderizarTodo() {
   renderizarClientes();
   renderizarCuentas();
   renderizarHistorialAnulaciones();
+  renderizarModuloComisiones();
   inicializarIconos();
 }
 
@@ -5781,6 +5793,12 @@ async function _descargarDatosSheets(mostrarMensaje = false) {
         guardarAnulacionesLocal();
       }
 
+      // 9. Liquidaciones: Reflejar hoja Liquidaciones de Sheets
+      if (json.data.liquidaciones !== undefined) {
+        state.liquidaciones = Array.isArray(json.data.liquidaciones) ? json.data.liquidaciones : [];
+        guardarLiquidacionesLocal();
+      }
+
       renderizarTodo();
       actualizarBadgeConexion();
       if (mostrarMensaje) {
@@ -6377,3 +6395,592 @@ function mostrarToast(mensaje, tipo = "info") {
     toast.classList.remove("translate-y-0", "opacity-100");
   }, 3000);
 }
+
+// ==========================================================================
+// MÓDULO: COMISIONES Y LIQUIDACIONES DE PREVENTISTAS (APP SATÉLITE)
+// ==========================================================================
+
+let _preventaLiqActual = null;
+let _saldoMaxLiqActual = 0;
+
+function filtrarPreventistaComision(preventa) {
+  state.filtroPreventaComision = preventa;
+  renderizarModuloComisiones();
+}
+
+function calcularDatosComisionesPreventistas() {
+  const pct = 0.13; // 13% fijo sobre ventas facturadas
+  const tc = Number(state.config.tipoCambio) || 520;
+
+  // Agrupar ventas por preventista
+  const preventasMap = new Map();
+
+  // 1. Analizar ventas facturadas
+  (state.ventas || []).forEach(v => {
+    if (!v) return;
+    const origVend = String(v.pedidoOrigenVendedor || "").trim();
+    if (!origVend) return; // Solo ventas originadas en app satélite
+
+    if (!preventasMap.has(origVend)) {
+      preventasMap.set(origVend, {
+        nombre: origVend,
+        totalVentasCRC: 0,
+        totalVentasUSD: 0,
+        totalComisionCRC: 0,
+        totalComisionUSD: 0,
+        totalLiquidadoCRC: 0,
+        totalLiquidadoUSD: 0,
+        saldoPendienteCRC: 0,
+        saldoPendienteUSD: 0,
+        facturas: [],
+        liquidaciones: []
+      });
+    }
+
+    const data = preventasMap.get(origVend);
+    const cant = parseNum(v.cantidad, 1);
+    const pCRC = parseNum(v.precioCRC !== undefined ? v.precioCRC : v.precioVentaCRC, 0);
+    const pUSD = parseNum(v.precioUSD !== undefined ? v.precioUSD : v.precioVentaUSD, 0);
+    const totCRC = parseNum(v.totalCRC, cant * pCRC);
+    const totUSD = parseNum(v.totalUSD, cant * pUSD);
+
+    data.totalVentasCRC += totCRC;
+    data.totalVentasUSD += totUSD;
+
+    // Guardar factura para desglose
+    data.facturas.push({
+      id: v.id,
+      fecha: v.fecha,
+      cliente: v.cliente || "Cliente General",
+      producto: v.nombre || v.codigo || "Licor",
+      cantidad: cant,
+      totalCRC: totCRC,
+      totalUSD: totUSD,
+      comisionCRC: Math.round(totCRC * pct),
+      comisionUSD: totUSD > 0 ? (totUSD * pct) : (totCRC * pct / tc),
+      pedidoOrigenId: v.pedidoOrigenId || "",
+      facturadoPor: v.facturadoPor || v.vendedor || "Carlos"
+    });
+  });
+
+  // 2. Incluir preventistas que tengan liquidaciones pero no ventas actuales
+  (state.liquidaciones || []).forEach(liq => {
+    if (!liq) return;
+    const vend = String(liq.vendedorPreventa || "Colaborador").trim();
+    if (!preventasMap.has(vend)) {
+      preventasMap.set(vend, {
+        nombre: vend,
+        totalVentasCRC: 0,
+        totalVentasUSD: 0,
+        totalComisionCRC: 0,
+        totalComisionUSD: 0,
+        totalLiquidadoCRC: 0,
+        totalLiquidadoUSD: 0,
+        saldoPendienteCRC: 0,
+        saldoPendienteUSD: 0,
+        facturas: [],
+        liquidaciones: []
+      });
+    }
+    const data = preventasMap.get(vend);
+    data.liquidaciones.push(liq);
+    data.totalLiquidadoCRC += parseNum(liq.montoCRC, 0);
+    data.totalLiquidadoUSD += parseNum(liq.montoUSD, 0);
+  });
+
+  // 3. Calcular comisiones y saldos
+  preventasMap.forEach(data => {
+    data.totalComisionCRC = Math.round(data.totalVentasCRC * pct);
+    data.totalComisionUSD = data.totalVentasUSD > 0 
+      ? Math.round(data.totalVentasUSD * pct * 100) / 100 
+      : Math.round((data.totalComisionCRC / tc) * 100) / 100;
+
+    data.saldoPendienteCRC = Math.max(0, data.totalComisionCRC - data.totalLiquidadoCRC);
+    data.saldoPendienteUSD = Math.max(0, data.totalComisionUSD - data.totalLiquidadoUSD);
+  });
+
+  return preventasMap;
+}
+
+function renderizarModuloComisiones() {
+  const elPendCRC = document.getElementById("comisionesGlobalPendienteCRC");
+  const elPendUSD = document.getElementById("comisionesGlobalPendienteUSD");
+  const elPrevCount = document.getElementById("comisionesGlobalPreventasCount");
+  const elLiqCRC = document.getElementById("comisionesGlobalLiquidadoCRC");
+  const elLiqUSD = document.getElementById("comisionesGlobalLiquidadoUSD");
+  const elLiqCount = document.getElementById("comisionesGlobalLiquidacionesCount");
+  const contPills = document.getElementById("comisionesPillsVendedores");
+  const contLista = document.getElementById("comisionesListaPreventistas");
+  const contHistorial = document.getElementById("comisionesHistorialLista");
+  const countHistorial = document.getElementById("comisionesHistorialCount");
+
+  if (!elPendCRC || !contLista) return;
+
+  const preventasMap = calcularDatosComisionesPreventistas();
+  const listaPreventistas = Array.from(preventasMap.values());
+
+  // 1. Totales Globales
+  let globalPendCRC = 0;
+  let globalPendUSD = 0;
+  let preventasConSaldo = 0;
+  let globalLiqCRC = 0;
+  let globalLiqUSD = 0;
+
+  listaPreventistas.forEach(p => {
+    globalPendCRC += p.saldoPendienteCRC;
+    globalPendUSD += p.saldoPendienteUSD;
+    if (p.saldoPendienteCRC > 0) preventasConSaldo++;
+    globalLiqCRC += p.totalLiquidadoCRC;
+    globalLiqUSD += p.totalLiquidadoUSD;
+  });
+
+  elPendCRC.textContent = fmtCRC(globalPendCRC);
+  elPendUSD.textContent = `${fmtUSD(globalPendUSD)} USD`;
+  if (elPrevCount) elPrevCount.textContent = `${preventasConSaldo} preventista(s) con saldo`;
+
+  elLiqCRC.textContent = fmtCRC(globalLiqCRC);
+  elLiqUSD.textContent = `${fmtUSD(globalLiqUSD)} USD`;
+  if (elLiqCount) elLiqCount.textContent = `${(state.liquidaciones || []).length} liquidaciones registradas`;
+
+  // 2. Renderizar Pills Selector de Preventista
+  if (contPills) {
+    const filtro = state.filtroPreventaComision || "todos";
+    let pillsHTML = `
+      <button onclick="filtrarPreventistaComision('todos')" id="pillPreventa-todos" 
+        class="px-3 py-1.5 rounded-xl font-bold text-[11px] shrink-0 transition-all ${filtro === 'todos' ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/30' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}">
+        Todos (${listaPreventistas.length})
+      </button>
+    `;
+    listaPreventistas.forEach(p => {
+      const active = filtro === p.nombre;
+      pillsHTML += `
+        <button onclick="filtrarPreventistaComision('${p.nombre.replace(/'/g, "\\'")}')" id="pillPreventa-${p.nombre.replace(/[^a-zA-Z0-9]/g, '_')}" 
+          class="px-3 py-1.5 rounded-xl font-bold text-[11px] shrink-0 transition-all ${active ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/30' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}">
+          ${p.nombre} ${p.saldoPendienteCRC > 0 ? '⚡' : '✓'}
+        </button>
+      `;
+    });
+    contPills.innerHTML = pillsHTML;
+  }
+
+  // 3. Renderizar Tarjetas de Preventistas
+  const filtroActual = state.filtroPreventaComision || "todos";
+  const filtrados = filtroActual === "todos" 
+    ? listaPreventistas 
+    : listaPreventistas.filter(p => p.nombre === filtroActual);
+
+  if (filtrados.length === 0) {
+    contLista.innerHTML = `
+      <div class="p-8 text-center text-slate-500 bg-slate-900/60 rounded-3xl border border-slate-800 space-y-2">
+        <i data-lucide="badge-percent" class="w-10 h-10 mx-auto text-slate-600 stroke-1"></i>
+        <p class="text-xs font-bold text-slate-300">No hay ventas facturadas con origen en preventa satélite.</p>
+        <p class="text-[11px] text-slate-500 max-w-xs mx-auto">Cuando un preventista envíe un pedido y tú o Daniel lo facturen, se calculará automáticamente el 13% de comisión aquí.</p>
+      </div>
+    `;
+  } else {
+    contLista.innerHTML = filtrados.map((p, idx) => {
+      const tieneSaldo = p.saldoPendienteCRC > 0;
+      const badgeSaldoClass = tieneSaldo 
+        ? "bg-amber-950/80 text-amber-300 border-amber-500/40"
+        : "bg-emerald-950/80 text-emerald-300 border-emerald-500/40";
+      const badgeSaldoTxt = tieneSaldo ? "⏳ Saldo Pendiente" : "✅ Al día (Liquidado)";
+
+      return `
+        <div class="bg-gradient-to-br from-slate-900 via-slate-850 to-slate-900 border ${tieneSaldo ? 'border-amber-500/40' : 'border-slate-800'} rounded-3xl p-4 shadow-xl space-y-3">
+          <!-- Cabecera Tarjeta Preventista -->
+          <div class="flex items-center justify-between border-b border-slate-800 pb-2.5">
+            <div class="flex items-center gap-2">
+              <div class="p-2 rounded-xl ${tieneSaldo ? 'bg-amber-500/20 text-amber-400' : 'bg-emerald-500/20 text-emerald-400'}">
+                <i data-lucide="user-check" class="w-4 h-4"></i>
+              </div>
+              <div>
+                <h3 class="text-sm font-black text-white">${p.nombre}</h3>
+                <span class="text-[10px] text-slate-400 font-mono">Preventa Satélite</span>
+              </div>
+            </div>
+            <span class="text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full border ${badgeSaldoClass}">
+              ${badgeSaldoTxt}
+            </span>
+          </div>
+
+          <!-- Métricas Financieras de Comisión -->
+          <div class="grid grid-cols-3 gap-2 text-center font-mono">
+            <div class="p-2 bg-slate-950/80 rounded-xl border border-slate-800/80">
+              <span class="text-[9px] text-slate-400 font-sans block uppercase font-bold">Ventas Totales</span>
+              <b class="text-white text-xs block truncate">${fmtCRC(p.totalVentasCRC)}</b>
+              <span class="text-[9px] text-slate-500">${fmtUSD(p.totalVentasUSD)}</span>
+            </div>
+
+            <div class="p-2 bg-slate-950/80 rounded-xl border border-slate-800/80">
+              <span class="text-[9px] text-emerald-400 font-sans block uppercase font-bold">Comisión (13%)</span>
+              <b class="text-emerald-400 text-xs block truncate">${fmtCRC(p.totalComisionCRC)}</b>
+              <span class="text-[9px] text-slate-500">${fmtUSD(p.totalComisionUSD)}</span>
+            </div>
+
+            <div class="p-2 bg-slate-950/80 rounded-xl border border-slate-800/80">
+              <span class="text-[9px] text-slate-400 font-sans block uppercase font-bold">Ya Pagado</span>
+              <b class="text-slate-300 text-xs block truncate">${fmtCRC(p.totalLiquidadoCRC)}</b>
+              <span class="text-[9px] text-slate-500">${fmtUSD(p.totalLiquidadoUSD)}</span>
+            </div>
+          </div>
+
+          <!-- Saldo Pendiente y Botón Liquidar -->
+          <div class="p-3 bg-slate-950 rounded-2xl border ${tieneSaldo ? 'border-amber-500/50' : 'border-slate-800'} flex items-center justify-between gap-3">
+            <div>
+              <span class="text-[10px] uppercase font-bold text-slate-400 block font-sans">Saldo a Liquidar:</span>
+              <div class="text-lg font-black ${tieneSaldo ? 'text-amber-400' : 'text-emerald-400'} font-mono leading-none mt-0.5">
+                ${fmtCRC(p.saldoPendienteCRC)}
+              </div>
+              <span class="text-[10px] text-slate-500 font-mono">${fmtUSD(p.saldoPendienteUSD)} USD</span>
+            </div>
+
+            <div class="flex items-center gap-2 shrink-0">
+              <button onclick="toggleAcordeonFacturas('acordeon-${idx}')" 
+                class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-bold text-xs flex items-center gap-1 active:scale-95 transition-all">
+                <i data-lucide="receipt" class="w-3.5 h-3.5 text-slate-400"></i>
+                <span>${p.facturas.length} Fact.</span>
+              </button>
+
+              ${tieneSaldo ? `
+                <button onclick="abrirModalLiquidacion('${p.nombre.replace(/'/g, "\\'")}')" 
+                  class="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs rounded-xl shadow-lg shadow-emerald-600/30 flex items-center gap-1.5 active:scale-95 transition-all">
+                  <i data-lucide="badge-dollar-sign" class="w-4 h-4"></i>
+                  <span>Liquidar</span>
+                </button>
+              ` : `
+                <span class="text-[10px] font-mono font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2 py-1 rounded-xl">
+                  ✓ Al día
+                </span>
+              `}
+            </div>
+          </div>
+
+          <!-- Acordeón de Facturas Asociadas -->
+          <div id="acordeon-${idx}" class="hidden pt-2 border-t border-slate-800/80 space-y-2">
+            <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block font-mono">
+              📋 Facturas Facturadas por Central (${p.facturas.length}):
+            </span>
+            <div class="space-y-1.5 max-h-56 overflow-y-auto pr-0.5">
+              ${p.facturas.length === 0 ? `
+                <div class="text-xs text-slate-500 italic p-2">Sin facturas registradas.</div>
+              ` : p.facturas.map(f => {
+                const fStr = f.fecha ? new Date(f.fecha).toLocaleDateString([], { month: 'short', day: 'numeric' }) : "S/F";
+                return `
+                  <div class="p-2 bg-slate-900/90 rounded-xl border border-slate-800 flex items-center justify-between text-xs font-mono">
+                    <div class="min-w-0 flex-1 pr-2">
+                      <div class="flex items-center gap-1.5">
+                        <span class="font-bold text-white">${f.id}</span>
+                        <span class="text-[10px] text-slate-400 font-sans truncate">• ${f.cliente}</span>
+                      </div>
+                      <div class="text-[10px] text-slate-500 font-sans truncate">
+                        ${f.producto} (x${f.cantidad}) • ${fStr}
+                      </div>
+                    </div>
+                    <div class="text-right shrink-0">
+                      <span class="text-white font-bold block">${fmtCRC(f.totalCRC)}</span>
+                      <span class="text-emerald-400 text-[10px] font-bold">+${fmtCRC(f.comisionCRC)} (13%)</span>
+                    </div>
+                  </div>
+                `;
+              }).join("")}
+            </div>
+          </div>
+        </div>
+      `;
+    }).join("");
+  }
+
+  // 4. Renderizar Historial de Liquidaciones Realizadas
+  if (contHistorial) {
+    const liquidaciones = [...(state.liquidaciones || [])];
+    if (countHistorial) countHistorial.textContent = liquidaciones.length;
+
+    if (liquidaciones.length === 0) {
+      contHistorial.innerHTML = `
+        <div class="p-6 text-center text-slate-500 space-y-1 text-xs">
+          <p class="font-bold text-slate-400">Aún no hay liquidaciones registradas.</p>
+          <p class="text-[11px] text-slate-500">Cuando liquides la comisión de un preventista, el recibo se guardará aquí.</p>
+        </div>
+      `;
+    } else {
+      contHistorial.innerHTML = liquidaciones.map(liq => {
+        const fStr = liq.fecha ? new Date(liq.fecha).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : "S/F";
+        return `
+          <div class="p-3 bg-slate-950/80 border border-emerald-500/20 rounded-2xl space-y-2 text-xs shadow-inner">
+            <div class="flex items-center justify-between border-b border-slate-800/80 pb-1.5">
+              <div class="flex items-center gap-1.5">
+                <span class="px-2 py-0.5 rounded-full text-[9.5px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-500/30">
+                  🧾 Liquidación
+                </span>
+                <span class="font-mono font-bold text-white text-xs">${liq.id}</span>
+              </div>
+              <span class="text-[10px] text-slate-400 font-mono">${fStr}</span>
+            </div>
+
+            <div class="flex items-center justify-between">
+              <div>
+                <span class="text-slate-400 text-[10px] block">Preventista:</span>
+                <b class="text-white text-xs">${liq.vendedorPreventa || 'Colaborador'}</b>
+              </div>
+              <div class="text-right font-mono">
+                <span class="text-sm font-black text-emerald-400 block leading-none">${fmtCRC(liq.montoCRC || 0)}</span>
+                <span class="text-[10px] text-slate-400">(${fmtUSD(liq.montoUSD || 0)})</span>
+              </div>
+            </div>
+
+            <div class="pt-1.5 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
+              <div>
+                <span>Pagó: <b class="text-indigo-300">${liq.liquidadoPor || 'Carlos'}</b> via <b class="text-amber-300">${liq.metodoPago || 'SINPE'}</b></span>
+                ${liq.notas ? `<div class="text-[10px] text-slate-500 italic">"${liq.notas}"</div>` : ''}
+              </div>
+
+              <div class="flex items-center gap-1.5 shrink-0">
+                <button onclick="compartirLiquidacionWhatsApp('${liq.id}')" title="Enviar comprobante por WhatsApp" 
+                  class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-bold text-[10px] flex items-center gap-1 active:scale-95 transition-all">
+                  <i data-lucide="message-circle" class="w-3.5 h-3.5"></i>
+                  <span>WhatsApp</span>
+                </button>
+                <button onclick="eliminarLiquidacionComision('${liq.id}')" title="Eliminar liquidación" 
+                  class="p-1 bg-rose-950/60 hover:bg-rose-900 border border-rose-800/50 text-rose-300 rounded-lg active:scale-95 transition-all">
+                  <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
+  }
+
+  inicializarIconos();
+}
+
+function toggleAcordeonFacturas(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.toggle("hidden");
+}
+
+// ==========================================================================
+// MODAL DE LIQUIDACIÓN DE COMISIONES
+// ==========================================================================
+
+function abrirModalLiquidacion(vendedor) {
+  const modal = document.getElementById("modalLiquidacionComision");
+  const prevMap = calcularDatosComisionesPreventistas();
+  const data = prevMap.get(vendedor);
+
+  if (!data) {
+    mostrarToast("No se encontraron datos para " + vendedor, "error");
+    return;
+  }
+
+  _preventaLiqActual = vendedor;
+  _saldoMaxLiqActual = data.saldoPendienteCRC;
+
+  const tc = Number(state.config.tipoCambio) || 520;
+  const nombreEl = document.getElementById("modalLiqPreventaNombre");
+  const inputVend = document.getElementById("modalLiqPreventaInput");
+  const elSaldoCRC = document.getElementById("modalLiqSaldoPendienteCRC");
+  const elSaldoUSD = document.getElementById("modalLiqSaldoPendienteUSD");
+  const inputMontoCRC = document.getElementById("modalLiqMontoCRC");
+  const inputMontoUSD = document.getElementById("modalLiqMontoUSD");
+  const selResp = document.getElementById("modalLiqResponsable");
+
+  if (nombreEl) nombreEl.textContent = vendedor;
+  if (inputVend) inputVend.value = vendedor;
+  if (elSaldoCRC) elSaldoCRC.textContent = fmtCRC(data.saldoPendienteCRC);
+  if (elSaldoUSD) elSaldoUSD.textContent = `${fmtUSD(data.saldoPendienteUSD)} USD`;
+
+  // Prellenar con el saldo total pendiente
+  if (inputMontoCRC) inputMontoCRC.value = data.saldoPendienteCRC;
+  if (inputMontoUSD) inputMontoUSD.value = (data.saldoPendienteCRC / tc).toFixed(2);
+  if (selResp) selResp.value = state.vendedorActual || "Carlos";
+
+  if (modal) {
+    modal.classList.remove("hidden");
+    modal.classList.add("flex");
+  }
+  inicializarIconos();
+}
+
+function cerrarModalLiquidacion() {
+  const modal = document.getElementById("modalLiquidacionComision");
+  if (modal) {
+    modal.classList.add("hidden");
+    modal.classList.remove("flex");
+  }
+}
+
+function setMontoLiqTotal() {
+  const tc = Number(state.config.tipoCambio) || 520;
+  const inputMontoCRC = document.getElementById("modalLiqMontoCRC");
+  const inputMontoUSD = document.getElementById("modalLiqMontoUSD");
+  if (inputMontoCRC) inputMontoCRC.value = _saldoMaxLiqActual;
+  if (inputMontoUSD) inputMontoUSD.value = (_saldoMaxLiqActual / tc).toFixed(2);
+}
+
+function autoConvertirModalLiq(moneda) {
+  const tc = Number(state.config.tipoCambio) || 520;
+  const inputCRC = document.getElementById("modalLiqMontoCRC");
+  const inputUSD = document.getElementById("modalLiqMontoUSD");
+  if (!inputCRC || !inputUSD || tc <= 0) return;
+
+  if (moneda === "CRC") {
+    const valCRC = parseNum(inputCRC.value, 0);
+    inputUSD.value = (valCRC / tc).toFixed(2);
+  } else {
+    const valUSD = parseNum(inputUSD.value, 0);
+    inputCRC.value = Math.round(valUSD * tc);
+  }
+}
+
+async function guardarLiquidacionModal(e) {
+  if (e && e.preventDefault) e.preventDefault();
+
+  const vendedor = _preventaLiqActual;
+  const inputMontoCRC = document.getElementById("modalLiqMontoCRC");
+  const inputMontoUSD = document.getElementById("modalLiqMontoUSD");
+  const selResp = document.getElementById("modalLiqResponsable");
+  const selMetodo = document.getElementById("modalLiqMetodo");
+  const checkFin = document.getElementById("modalLiqCheckFinanzas");
+  const inputNotas = document.getElementById("modalLiqNotas");
+
+  const montoCRC = parseNum(inputMontoCRC ? inputMontoCRC.value : 0, 0);
+  const montoUSD = parseNum(inputMontoUSD ? inputMontoUSD.value : 0, 0);
+  const resp = selResp ? selResp.value : "Carlos";
+  const metodo = selMetodo ? selMetodo.value : "SINPE";
+  const registrarFin = checkFin ? checkFin.checked : true;
+  const notas = inputNotas ? inputNotas.value.trim() : "";
+
+  if (montoCRC <= 0) {
+    mostrarToast("Ingresa un monto válido para liquidar.", "error");
+    return;
+  }
+
+  const ahora = new Date();
+  const idLiq = "LIQ-" + UtilitiesDateLocal(ahora);
+
+  const liqObj = {
+    id: idLiq,
+    fecha: ahora.toISOString(),
+    vendedorPreventa: vendedor,
+    montoCRC: montoCRC,
+    montoUSD: montoUSD,
+    liquidadoPor: resp,
+    metodoPago: metodo,
+    facturasIds: "",
+    notas: notas,
+    registrarEnFinanzas: registrarFin
+  };
+
+  if (!state.liquidaciones) state.liquidaciones = [];
+  state.liquidaciones.unshift(liqObj);
+  guardarLiquidacionesLocal();
+
+  // Si registró egreso en Finanzas localmente
+  if (registrarFin) {
+    const movObj = {
+      id: "FIN-" + idLiq,
+      fecha: todayStr(),
+      tipo: "Egreso",
+      cuentaOrigen: "Caja Chica",
+      cuentaDestino: "Gasto de Comisiones (" + vendedor + ")",
+      socio: resp,
+      montoUSD: montoUSD,
+      tipoCambio: Number(state.config.tipoCambio) || 520,
+      montoCRC: montoCRC,
+      metodoPago: metodo,
+      notas: `Pago comisiones a ${vendedor} (${idLiq}) ${notas ? '- ' + notas : ''}`,
+      registradoPor: resp
+    };
+    state.movimientosDinero.unshift(movObj);
+    guardarFinanzasLocal();
+    encolarSincronizacion("registrarMovimiento", { movimiento: movObj });
+  }
+
+  // Encolar y sincronizar liquidación en Google Sheets
+  encolarSincronizacion("registrarLiquidacion", { liquidacion: liqObj });
+
+  cerrarModalLiquidacion();
+  renderizarModuloComisiones();
+  renderizarFinanzas();
+
+  mostrarToast(`¡Liquidación de ${fmtCRC(montoCRC)} a ${vendedor} registrada con éxito! 💰`, "success");
+
+  // Preguntar si desea enviar comprobante por WhatsApp
+  setTimeout(() => {
+    if (confirm(`¿Deseas enviar el comprobante de liquidación a ${vendedor} por WhatsApp?`)) {
+      compartirLiquidacionWhatsApp(idLiq);
+    }
+  }, 400);
+
+  if (state.config.sheetsUrl && navigator.onLine) {
+    procesarColaSincronizacion(false);
+  }
+}
+
+function UtilitiesDateLocal(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  const h = String(date.getHours()).padStart(2, '0');
+  const min = String(date.getMinutes()).padStart(2, '0');
+  const s = String(date.getSeconds()).padStart(2, '0');
+  return `${y}${m}${d}-${h}${min}${s}`;
+}
+
+function compartirLiquidacionWhatsApp(idLiquidacion) {
+  const liq = (state.liquidaciones || []).find(l => l.id === idLiquidacion);
+  if (!liq) {
+    mostrarToast("Liquidación no encontrada.", "error");
+    return;
+  }
+
+  const negocio = "DC EL DESTAPE LICORES";
+  const fecha = liq.fecha ? new Date(liq.fecha).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : new Date().toLocaleString();
+
+  let texto = `🍷 *${negocio.toUpperCase()}* 🍷\n`;
+  texto += `--------------------------------\n`;
+  texto += `🧾 *COMPROBANTE DE LIQUIDACIÓN DE COMISIÓN*\n`;
+  texto += `📅 Fecha: ${fecha}\n`;
+  texto += `🎫 N° Comprobante: *${liq.id}*\n`;
+  texto += `👤 Preventista: *${liq.vendedorPreventa}*\n`;
+  texto += `👤 Liquidado por: *${liq.liquidadoPor}*\n`;
+  texto += `💳 Método de Pago: *${liq.metodoPago}*\n`;
+  texto += `--------------------------------\n`;
+  texto += `💰 *MONTO LIQUIDADO:* *${fmtCRC(liq.montoCRC)}*\n`;
+  texto += `💵 *Equivalente USD:* *${fmtUSD(liq.montoUSD)}*\n`;
+  if (liq.notas) texto += `📝 Notas: ${liq.notas}\n`;
+  texto += `--------------------------------\n`;
+  texto += `✅ Tu comisión ha sido liquidada exitosamente. Tu saldo pendiente en la aplicación ha sido actualizado.\n\n`;
+  texto += `¡Muchas gracias por tu esfuerzo y ventas! 🚀🍷`;
+
+  // Buscar teléfono del preventista si existe en clientes
+  let tel = "";
+  const cli = Object.values(state.clientes || {}).find(c => 
+    c.nombre && c.nombre.toLowerCase().includes(liq.vendedorPreventa.toLowerCase())
+  );
+  if (cli && cli.telefono) tel = String(cli.telefono).replace(/\D/g, "");
+
+  const waUrl = tel 
+    ? `https://wa.me/506${tel}?text=${encodeURIComponent(texto)}`
+    : `https://wa.me/?text=${encodeURIComponent(texto)}`;
+
+  window.open(waUrl, "_blank");
+}
+
+function eliminarLiquidacionComision(idLiq) {
+  if (!confirm(`¿Eliminar la liquidación ${idLiq}? El saldo del preventista volverá a quedar como pendiente.`)) return;
+
+  state.liquidaciones = (state.liquidaciones || []).filter(l => l.id !== idLiq);
+  guardarLiquidacionesLocal();
+
+  encolarSincronizacion("eliminarLiquidacion", { id: idLiq });
+  renderizarModuloComisiones();
+  mostrarToast(`Liquidación ${idLiq} eliminada.`, "info");
+
+  if (state.config.sheetsUrl && navigator.onLine) {
+    procesarColaSincronizacion(false);
+  }
+}
