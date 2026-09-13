@@ -1470,7 +1470,7 @@
           <div class="flex items-center gap-3.5">
             <!-- Preview Box (Grande 20x20) -->
             <div id="modalImgPreviewContainer" class="relative w-20 h-20 rounded-2xl bg-slate-900 border border-slate-700 flex items-center justify-center shrink-0 overflow-hidden shadow-inner">
-              <img id="prodImagenPreview" src="" alt="Preview" class="hidden w-full h-full object-cover" onerror="onImgPreviewError()">
+              <img id="prodImagenPreview" alt="Preview" class="hidden w-full h-full object-cover" onerror="if(typeof onImgPreviewError==='function')onImgPreviewError()">
               <div id="prodImagenPlaceholder" class="flex flex-col items-center justify-center text-slate-500 text-[10px]">
                 <i data-lucide="wine" class="w-8 h-8 text-slate-600 mb-0.5"></i>
                 <span>Sin foto</span>
