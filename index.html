@@ -2284,10 +2284,10 @@
 
 
   <!-- ============================================================== -->
-  <!-- BOTTOM NAVIGATION BAR (8 PESTAÑAS)                             -->
+  <!-- BOTTOM NAVIGATION BAR: PRIORIDADES DE OPERACIÓN                -->
   <!-- ============================================================== -->
   <nav class="fixed bottom-0 left-0 right-0 z-40 bg-slate-900/95 backdrop-blur-lg border-t border-slate-800/80 px-1 py-1.5">
-    <div class="max-w-md mx-auto grid grid-cols-8 gap-0.5 text-[7.5px] font-bold text-slate-400">
+    <div class="max-w-md mx-auto grid grid-cols-5 gap-1 text-[10px] font-bold text-slate-400">
       
       <!-- Tab 1: Dashboard -->
       <button onclick="cambiarVista('dashboard')" id="navTab-dashboard" class="nav-item active flex flex-col items-center justify-center py-1.5 rounded-xl transition-all">
@@ -2315,32 +2315,34 @@
         <span>Clientes</span>
       </button>
 
-      <!-- Tab 5: Compras -->
-      <button onclick="cambiarVista('compras')" id="navTab-compras" class="nav-item flex flex-col items-center justify-center py-1.5 rounded-xl transition-all">
-        <i data-lucide="truck" class="w-4 h-4 mb-0.5"></i>
-        <span>Compras</span>
-      </button>
-
-      <!-- Tab 6: Cuentas Pendientes -->
-      <button onclick="cambiarVista('cuentas')" id="navTab-cuentas" class="nav-item flex flex-col items-center justify-center py-1.5 rounded-xl transition-all">
-        <i data-lucide="badge-dollar-sign" class="w-4 h-4 mb-0.5"></i>
-        <span>Cuentas</span>
-      </button>
-
-      <!-- Tab 7: Comisiones (NUEVO) -->
-      <button onclick="cambiarVista('comisiones')" id="navTab-comisiones" class="nav-item flex flex-col items-center justify-center py-1.5 rounded-xl transition-all">
-        <i data-lucide="badge-percent" class="w-4 h-4 mb-0.5 text-emerald-400"></i>
-        <span>Comisión</span>
-      </button>
-
-      <!-- Tab 8: Finanzas -->
-      <button onclick="cambiarVista('finanzas')" id="navTab-finanzas" class="nav-item flex flex-col items-center justify-center py-1.5 rounded-xl transition-all">
-        <i data-lucide="wallet" class="w-4 h-4 mb-0.5"></i>
-        <span>Finanzas</span>
+      <!-- Accesos secundarios reunidos para que las acciones diarias respiren -->
+      <button onclick="abrirMenuMas()" id="navTab-mas" class="nav-item flex flex-col items-center justify-center py-1.5 rounded-xl transition-all">
+        <i data-lucide="more-horizontal" class="w-5 h-5 mb-0.5"></i>
+        <span>Más</span>
       </button>
 
     </div>
   </nav>
+
+  <!-- MENÚ SECUNDARIO: mantiene disponibles los módulos menos frecuentes -->
+  <div id="modalMenuMas" class="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm hidden items-end" onclick="if(event.target === this) cerrarMenuMas()">
+    <div class="w-full max-w-md mx-auto bg-slate-900 border-t border-slate-700 rounded-t-3xl p-5 pb-8 shadow-2xl animate-slide-up">
+      <div class="flex items-center justify-between mb-4">
+        <div>
+          <p class="text-xs font-black text-white uppercase tracking-wider">Gestión y seguimiento</p>
+          <p class="text-[11px] text-slate-400 mt-0.5">Accesos que normalmente no necesitas para cada venta</p>
+        </div>
+        <button onclick="cerrarMenuMas()" aria-label="Cerrar menú" class="p-2 rounded-xl bg-slate-800 text-slate-300"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+      <div class="grid grid-cols-2 gap-2.5">
+        <button onclick="irDesdeMenuMas('compras')" class="p-3 rounded-2xl bg-slate-800 border border-slate-700 text-left active:scale-95"><i data-lucide="truck" class="w-5 h-5 text-amber-400 mb-2"></i><span class="block text-xs font-bold text-white">Compras</span><span class="text-[10px] text-slate-400">Entradas de inventario</span></button>
+        <button onclick="irDesdeMenuMas('cuentas')" class="p-3 rounded-2xl bg-slate-800 border border-slate-700 text-left active:scale-95"><i data-lucide="badge-dollar-sign" class="w-5 h-5 text-rose-400 mb-2"></i><span class="block text-xs font-bold text-white">Cuentas</span><span class="text-[10px] text-slate-400">Cobros y pagos</span></button>
+        <button onclick="irDesdeMenuMas('comisiones')" class="p-3 rounded-2xl bg-slate-800 border border-slate-700 text-left active:scale-95"><i data-lucide="badge-percent" class="w-5 h-5 text-emerald-400 mb-2"></i><span class="block text-xs font-bold text-white">Comisiones</span><span class="text-[10px] text-slate-400">Liquidaciones</span></button>
+        <button onclick="irDesdeMenuMas('finanzas')" class="p-3 rounded-2xl bg-slate-800 border border-slate-700 text-left active:scale-95"><i data-lucide="wallet" class="w-5 h-5 text-indigo-400 mb-2"></i><span class="block text-xs font-bold text-white">Finanzas</span><span class="text-[10px] text-slate-400">Caja y socios</span></button>
+        <button onclick="irDesdeMenuMas('configuracion')" class="col-span-2 p-3 rounded-2xl bg-slate-800 border border-slate-700 text-left active:scale-95 flex items-center gap-3"><i data-lucide="settings" class="w-5 h-5 text-slate-300"></i><span><span class="block text-xs font-bold text-white">Configuración y respaldo</span><span class="text-[10px] text-slate-400">Sincronización, exportación y ajustes</span></span></button>
+      </div>
+    </div>
+  </div>
 
   <!-- Application Logic -->
   <script src="app.js?v=20260911_02"></script>

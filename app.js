@@ -514,6 +514,10 @@ function cambiarVista(vista) {
     }
   });
 
+  const accesosPrincipales = ["dashboard", "inventario", "ventas", "clientes"];
+  const navMas = document.getElementById("navTab-mas");
+  if (navMas) navMas.classList.toggle("active", !accesosPrincipales.includes(vista));
+
   if (vista === "dashboard") renderizarDashboard();
   if (vista === "inventario") renderizarInventario();
   if (vista === "compras") poblarSelectCompras();
@@ -537,6 +541,26 @@ function cambiarVista(vista) {
 
   inicializarIconos();
   window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function abrirMenuMas() {
+  const modal = document.getElementById("modalMenuMas");
+  if (!modal) return;
+  modal.classList.remove("hidden");
+  modal.classList.add("flex");
+  inicializarIconos();
+}
+
+function cerrarMenuMas() {
+  const modal = document.getElementById("modalMenuMas");
+  if (!modal) return;
+  modal.classList.add("hidden");
+  modal.classList.remove("flex");
+}
+
+function irDesdeMenuMas(vista) {
+  cerrarMenuMas();
+  cambiarVista(vista);
 }
 
 function capitalizar(str) {
@@ -1084,6 +1108,10 @@ function facturarPedido(idPedido) {
   // 4. Guardar referencia al pedido que se está facturando (para trazabilidad al facturar)
   state.pedidoEnFacturacion = idPedido;
   state.pedidoOrigenVendedor = String(ped.vendedor || "").trim(); // Quién anotó el pedido original
+  try {
+    localStorage.setItem("inv_pedido_en_facturacion", idPedido);
+    localStorage.setItem("inv_pedido_origen_vendedor", state.pedidoOrigenVendedor);
+  } catch(e) {}
 
   // 5. Navegar a la pestaña Ventas
   cambiarVista("ventas");
@@ -4206,8 +4234,8 @@ async function completarVenta() {
     puntosCanjados,
     // --- Trazabilidad de pedidos preventa ---
     facturadoPor: vendedor,                                           // Quien facturó (Carlos/Daniel)
-    pedidoOrigenId: state.pedidoEnFacturacion || "",                  // ID del pedido original
-    pedidoOrigenVendedor: state.pedidoOrigenVendedor || ""            // Quien tomó el pedido (colaborador)
+    pedidoOrigenId: state.pedidoEnFacturacion || localStorage.getItem("inv_pedido_en_facturacion") || "", // ID del pedido original
+    pedidoOrigenVendedor: state.pedidoOrigenVendedor || localStorage.getItem("inv_pedido_origen_vendedor") || "" // Quien tomó el pedido (colaborador)
   };
 
   // --- Actualizar puntos del cliente ---
@@ -4283,16 +4311,22 @@ async function completarVenta() {
   if (clienteInput) clienteInput.value = "";
 
   // --- Auto-completar pedido si se facturó desde un encargo ---
-  if (state.pedidoEnFacturacion) {
-    const idPedOrig = state.pedidoEnFacturacion;
+  const idPedOrig = state.pedidoEnFacturacion || localStorage.getItem("inv_pedido_en_facturacion") || "";
+  if (idPedOrig) {
     state.pedidoEnFacturacion = null;
     state.pedidoOrigenVendedor = null;
+    try {
+      localStorage.removeItem("inv_pedido_en_facturacion");
+      localStorage.removeItem("inv_pedido_origen_vendedor");
+    } catch(e) {}
     const pedOrig = (state.pedidos || []).find(p => p.id === idPedOrig);
     if (pedOrig) {
       pedOrig.estado = "comprado";
       pedOrig.fechaComprado = new Date().toISOString();
+      pedOrig.idFactura = idVenta;
+      pedOrig.idVenta = idVenta;
       guardarPedidosLocal();
-      encolarAccionSincronizacion("marcarPedidoComprado", { id: idPedOrig });
+      encolarAccionSincronizacion("marcarPedidoComprado", { id: idPedOrig, idVenta: idVenta });
     }
   }
 
@@ -5622,7 +5656,9 @@ function actualizarIndicadorOffline() {
       banner.className = "max-w-md mx-auto px-3.5 py-1.5 mt-2 bg-indigo-950/90 border border-indigo-500/50 rounded-xl text-indigo-200 text-xs font-bold flex items-center justify-between shadow-lg";
       banner.classList.remove("hidden");
     } else {
-      banner.classList.add("hidden");
+      bannerText.textContent = "✓ Todo está guardado y sincronizado.";
+      banner.className = "max-w-md mx-auto px-3.5 py-1.5 mt-2 bg-emerald-950/70 border border-emerald-500/30 rounded-xl text-emerald-200 text-xs font-bold flex items-center justify-between shadow-lg";
+      banner.classList.remove("hidden");
     }
   }
 
@@ -7050,4 +7086,4 @@ function eliminarLiquidacionComision(idLiq) {
   if (state.config.sheetsUrl && navigator.onLine) {
     procesarColaSincronizacion(false);
   }
-}
+}
