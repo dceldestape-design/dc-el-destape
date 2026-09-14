@@ -1377,6 +1377,164 @@ function ordenarProductos() {
 }
 
 // ==========================================================================
+// EXPORTAR CATÁLOGO DE PRECIOS Y STOCK PARA WHATSAPP
+// ==========================================================================
+function abrirModalExportarCatalogo() {
+  const modal = document.getElementById("modalExportarCatalogo");
+  if (!modal) return;
+
+  // Poblado dinámico del selector de categorías en el modal
+  const selCat = document.getElementById("exportFiltroCategoria");
+  if (selCat) {
+    const categorias = ["Todas", ...new Set(Object.values(state.productos || {}).map(p => p.categoria || "General"))];
+    selCat.innerHTML = categorias.map(c => `<option value="${c}">${c === "Todas" ? "Todas las categorías" : c}</option>`).join("");
+    // Heredar categoría actualmente seleccionada si existe
+    if (state.categoriaSeleccionada && categorias.includes(state.categoriaSeleccionada)) {
+      selCat.value = state.categoriaSeleccionada;
+    } else {
+      selCat.value = "Todas";
+    }
+  }
+
+  // Heredar filtro de stock si el usuario lo tenía activo
+  const selStock = document.getElementById("exportFiltroStock");
+  if (selStock) {
+    selStock.value = (state.filtroEstadoStock === "todos") ? "todos" : "constock";
+  }
+
+  actualizarVistaPreviaExportarCatalogo();
+
+  modal.classList.remove("hidden");
+  modal.classList.add("flex");
+}
+
+function cerrarModalExportarCatalogo() {
+  const modal = document.getElementById("modalExportarCatalogo");
+  if (modal) {
+    modal.classList.add("hidden");
+    modal.classList.remove("flex");
+  }
+}
+
+function generarTextoCatalogoWhatsApp() {
+  const filtroStock = document.getElementById("exportFiltroStock") ? document.getElementById("exportFiltroStock").value : "constock";
+  const filtroCategoria = document.getElementById("exportFiltroCategoria") ? document.getElementById("exportFiltroCategoria").value : "Todas";
+  const mostrarCantidades = document.getElementById("exportMostrarCantidades") ? document.getElementById("exportMostrarCantidades").checked : true;
+
+  const stockMap = calcularStockPorCodigo();
+  const todos = Object.values(state.productos || {});
+  const vistaVend = state.vistaVendedor || "Consolidado";
+
+  // Filtrar según opciones
+  let prods = todos.filter(p => {
+    const st = stockMap[p.codigo] || 0;
+    if (filtroStock === "constock" && st <= 0) return false;
+    if (filtroCategoria !== "Todas" && (p.categoria || "General") !== filtroCategoria) return false;
+    return true;
+  });
+
+  // Ordenar por categoría y luego nombre
+  prods.sort((a, b) => {
+    const catA = (a.categoria || "General").localeCompare(b.categoria || "General");
+    if (catA !== 0) return catA;
+    return (a.nombre || "").localeCompare(b.nombre || "");
+  });
+
+  const negocio = state.config.nombreNegocio || "DC EL DESTAPE LICORES";
+  const telefono = state.config.telefonoNegocio || "+506 8992-7936";
+  const fechaHoy = new Date().toLocaleDateString("es-CR", { day: "2-digit", month: "long", year: "numeric" });
+
+  let texto = `🍷 *${negocio.toUpperCase()}* 🍷\n`;
+  texto += `📋 *LISTA DE PRECIOS & DISPONIBILIDAD*\n`;
+  texto += `📅 *Actualizado:* ${fechaHoy}\n`;
+  texto += `📱 *Pedidos:* ${telefono}\n`;
+  texto += `------------------------------------\n`;
+
+  if (prods.length === 0) {
+    texto += `_No hay productos disponibles con los filtros seleccionados._\n`;
+  } else {
+    // Agrupar por categoría
+    let catActual = "";
+    prods.forEach(p => {
+      const cat = (p.categoria || "GENERAL").toUpperCase();
+      if (cat !== catActual) {
+        catActual = cat;
+        texto += `\n📌 *${catActual}*\n`;
+      }
+
+      const st = stockMap[p.codigo] || 0;
+      const precioCRC = fmtCRC(p.precioVentaCRC || 0);
+      const precioUSD = p.precioVentaUSD ? ` _(${fmtUSD(p.precioVentaUSD)})_` : "";
+      
+      let detalleStock = "";
+      if (mostrarCantidades) {
+        detalleStock = st > 0 ? ` [${st} disp.]` : ` [Bajo pedido]`;
+      }
+
+      texto += `• *${p.nombre}*${detalleStock}\n   ↳ ${precioCRC}${precioUSD}\n`;
+    });
+  }
+
+  texto += `\n------------------------------------\n`;
+  texto += `🛵 *Entregas y envíos a convenir.*\n\n`;
+  texto += `📱 *Síguenos en nuestras Redes Sociales:*\n`;
+  texto += `📷 *Instagram:* https://www.instagram.com/dceldestape\n`;
+  texto += `🔵 *Facebook:* https://www.facebook.com/share/1CHT3FRSc6/\n\n`;
+  texto += `¡Escríbenos para apartar tus licores favoritos! 🥂`;
+
+  return { texto, count: prods.length };
+}
+
+function actualizarVistaPreviaExportarCatalogo() {
+  const preview = document.getElementById("exportPreviewText");
+  const countEl = document.getElementById("exportItemsCount");
+  const { texto, count } = generarTextoCatalogoWhatsApp();
+  
+  if (preview) preview.value = texto;
+  if (countEl) countEl.textContent = count;
+}
+
+function copiarTextoCatalogoWhatsApp() {
+  const { texto, count } = generarTextoCatalogoWhatsApp();
+  if (!texto) {
+    mostrarToast("No hay datos para copiar", "error");
+    return;
+  }
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(texto).then(() => {
+      mostrarToast(`¡Catálogo de ${count} licores copiado al portapapeles! 📋`, "success");
+    }).catch(() => {
+      // Fallback manual con textarea
+      const ta = document.getElementById("exportPreviewText");
+      if (ta) {
+        ta.select();
+        document.execCommand("copy");
+        mostrarToast(`¡Catálogo de ${count} licores copiado! 📋`, "success");
+      }
+    });
+  } else {
+    const ta = document.getElementById("exportPreviewText");
+    if (ta) {
+      ta.select();
+      document.execCommand("copy");
+      mostrarToast(`¡Catálogo de ${count} licores copiado! 📋`, "success");
+    }
+  }
+}
+
+function enviarCatalogoWhatsAppDirecto() {
+  const { texto, count } = generarTextoCatalogoWhatsApp();
+  if (!texto) {
+    mostrarToast("No hay datos para exportar", "error");
+    return;
+  }
+  const encoded = encodeURIComponent(texto);
+  const url = `https://wa.me/?text=${encoded}`;
+  window.open(url, "_blank");
+  mostrarToast(`Abriendo WhatsApp con ${count} productos... 📲`, "success");
+}
+// ==========================================================================
 // MÓDULO: MAESTRO DE CLIENTES Y PUNTOS DE FIDELIZACIÓN
 // ==========================================================================
 
@@ -5524,6 +5682,77 @@ function reproducirBeep() {
 // ==========================================================================
 // 7. CONEXIÓN API CON GOOGLE APPS SCRIPT Y MOTOR OFFLINE-FIRST
 // ==========================================================================
+// ==========================================================================
+// CONTROL DEL OVERLAY DE BLOQUEO DURANTE SINCRONIZACIÓN
+// ==========================================================================
+function mostrarBloqueoSincronizacion(mensaje = "Sincronizando con Google Sheets...") {
+  const overlay = document.getElementById("syncBlockingOverlay");
+  const statusTxt = document.getElementById("syncBlockingOverlayStatus");
+  if (statusTxt) statusTxt.textContent = mensaje;
+  if (overlay) {
+    overlay.classList.remove("hidden");
+    overlay.classList.add("flex");
+  }
+}
+
+function actualizarMensajeBloqueoSincronizacion(mensaje) {
+  const statusTxt = document.getElementById("syncBlockingOverlayStatus");
+  if (statusTxt) statusTxt.textContent = mensaje;
+}
+
+function ocultarBloqueoSincronizacion() {
+  const overlay = document.getElementById("syncBlockingOverlay");
+  if (overlay) {
+    overlay.classList.add("hidden");
+    overlay.classList.remove("flex");
+  }
+}
+
+function describirAccionSincronizacion(accion, datos) {
+  datos = datos || {};
+  switch (accion) {
+    case "registrarVenta":
+      return (datos.venta && datos.venta.id) ? ("Enviando venta (" + datos.venta.id + ")...") : "Enviando venta a Sheets...";
+    case "registrarCompra":
+      return (datos.compra && datos.compra.id) ? ("Enviando compra (" + datos.compra.id + ")...") : "Enviando compra a Sheets...";
+    case "eliminarCompra":
+      return "Eliminando compra (" + (datos.id || '') + ") en Sheets...";
+    case "registrarPedido":
+      return (datos.pedido && datos.pedido.id) ? ("Enviando pedido (" + datos.pedido.id + ")...") : "Enviando pedido a Sheets...";
+    case "marcarPedidoComprado":
+      return "Actualizando estado de pedido (" + (datos.id || '') + ")...";
+    case "eliminarPedido":
+      return "Eliminando pedido (" + (datos.id || '') + ") en Sheets...";
+    case "registrarCuenta":
+      return (datos.cuenta && datos.cuenta.id) ? ("Registrando cuenta (" + datos.cuenta.id + ")...") : "Registrando cuenta en Sheets...";
+    case "abonarCuenta":
+      return "Enviando abono de cuenta (" + (datos.id || '') + ")...";
+    case "eliminarCuenta":
+      return "Eliminando cuenta (" + (datos.id || '') + ") en Sheets...";
+    case "guardarCliente":
+      return (datos.cliente && datos.cliente.nombre) ? ("Guardando cliente (" + datos.cliente.nombre + ")...") : "Guardando cliente en Sheets...";
+    case "actualizarPuntos":
+      return "Actualizando puntos de cliente en Sheets...";
+    case "crearProducto":
+    case "actualizarProducto":
+      return (datos.producto && datos.producto.nombre) ? ("Guardando producto (" + datos.producto.nombre + ")...") : "Guardando producto en Sheets...";
+    case "eliminarProducto":
+      return "Eliminando producto (" + (datos.codigo || '') + ")...";
+    case "registrarMovimiento":
+      return "Registrando movimiento de finanzas en Sheets...";
+    case "eliminarMovimiento":
+      return "Eliminando movimiento de finanzas en Sheets...";
+    case "anularVenta":
+      return "Enviando anulación de venta a Sheets...";
+    case "registrarLiquidacion":
+      return "Registrando liquidación de comisión...";
+    case "eliminarLiquidacion":
+      return "Eliminando liquidación...";
+    default:
+      return "Enviando " + accion + "...";
+  }
+}
+
 let sincronizandoCola = false;
 
 function encolarAccionSincronizacion(accion, datos) {
@@ -5587,13 +5816,17 @@ async function procesarColaSincronizacion(mostrarFeedback = false) {
   const icon = document.getElementById("syncIcon");
   if (icon) icon.classList.add("animate-spin");
 
-  if (mostrarFeedback) {
-    mostrarToast(`Subiendo ${state.colaSincronizacion.length} cambios pendientes a Google Sheets... ☁️`, "info");
-  }
+  const totalAProcesar = state.colaSincronizacion.length;
+  mostrarBloqueoSincronizacion(`Subiendo cambios a Google Sheets (1 de ${totalAProcesar})...`);
 
   try {
+    let indexItem = 0;
     while (state.colaSincronizacion.length > 0) {
       const item = state.colaSincronizacion[0];
+      indexItem++;
+      const descripcion = describirAccionSincronizacion(item.accion, item.datos);
+      actualizarMensajeBloqueoSincronizacion(`[${indexItem}/${totalAProcesar}] ${descripcion}`);
+
       try {
         await enviarPeticionSheets(item.accion, item.datos);
         // Si no arrojó excepción de red, se procesó
@@ -5607,12 +5840,10 @@ async function procesarColaSincronizacion(mostrarFeedback = false) {
     }
 
     if (state.colaSincronizacion.length === 0) {
-      if (mostrarFeedback) {
-        mostrarToast("¡Todos los cambios sin internet se sincronizaron con Google Sheets! 🚀", "success");
-      }
+      actualizarMensajeBloqueoSincronizacion("Descargando datos actualizados de Sheets...");
       // Descargar datos frescos sin volver a procesar cola (ya está vacía)
       sincronizandoCola = false; // liberar flag antes del GET
-      await _descargarDatosSheets(false);
+      await _descargarDatosSheets(mostrarFeedback);
       return;
     } else {
       mostrarToast(`Quedan ${state.colaSincronizacion.length} cambios pendientes por sincronizar.`, "info");
@@ -5623,6 +5854,7 @@ async function procesarColaSincronizacion(mostrarFeedback = false) {
     sincronizandoCola = false;
     if (icon) icon.classList.remove("animate-spin");
     actualizarIndicadorOffline();
+    ocultarBloqueoSincronizacion();
   }
 }
 
@@ -5656,9 +5888,8 @@ function actualizarIndicadorOffline() {
       banner.className = "max-w-md mx-auto px-3.5 py-1.5 mt-2 bg-indigo-950/90 border border-indigo-500/50 rounded-xl text-indigo-200 text-xs font-bold flex items-center justify-between shadow-lg";
       banner.classList.remove("hidden");
     } else {
-      bannerText.textContent = "✓ Todo está guardado y sincronizado.";
-      banner.className = "max-w-md mx-auto px-3.5 py-1.5 mt-2 bg-emerald-950/70 border border-emerald-500/30 rounded-xl text-emerald-200 text-xs font-bold flex items-center justify-between shadow-lg";
-      banner.classList.remove("hidden");
+      // Si todo está sincronizado y hay internet, ocultar el banner para no saturar la pantalla
+      banner.classList.add("hidden");
     }
   }
 
@@ -5931,13 +6162,19 @@ async function sincronizarConSheets(mostrarMensaje = true) {
     return;
   }
 
-  // Subir cola en segundo plano (sin bloquear el GET de descarga)
+  // Si hay cola pendiente, procesarColaSincronizacion se encargará de subirla con overlay y luego descargar
   if (state.colaSincronizacion && state.colaSincronizacion.length > 0) {
-    procesarColaSincronizacion(false);
+    await procesarColaSincronizacion(mostrarMensaje);
+    return;
   }
 
-  // Siempre descargar datos frescos (pedidos, productos, clientes, etc.)
-  await _descargarDatosSheets(mostrarMensaje);
+  // Si no hay cola, mostrar bloqueo mientras descarga datos frescos
+  mostrarBloqueoSincronizacion("Descargando inventario y ventas de Google Sheets...");
+  try {
+    await _descargarDatosSheets(mostrarMensaje);
+  } finally {
+    ocultarBloqueoSincronizacion();
+  }
 }
 
 function guardarConfiguracionSheets() {

@@ -468,6 +468,10 @@
           <i data-lucide="scan-barcode" class="w-5 h-5 text-indigo-400"></i>
           <span>Escanear</span>
         </button>
+                <button onclick="abrirModalExportarCatalogo()" title="Compartir Lista de Precios por WhatsApp" class="px-4 py-3.5 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/40 rounded-2xl active:scale-95 font-bold text-sm flex items-center gap-2 transition-all shrink-0">
+          <i data-lucide="share-2" class="w-5 h-5"></i>
+          <span>Compartir Lista</span>
+        </button>
         <button onclick="abrirModalProducto()" title="Agregar Licor" class="px-5 py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl shadow-lg shadow-indigo-600/30 active:scale-95 font-bold text-sm flex items-center gap-2 transition-all shrink-0">
           <i data-lucide="plus" class="w-5 h-5"></i>
           <span>Nuevo Licor</span>
@@ -1581,7 +1585,76 @@
   <!-- ============================================================== -->
   <!-- MODAL: CREAR / EDITAR PRODUCTO (DUAL CURRENCY)                 -->
   <!-- ============================================================== -->
-  <div id="modalProducto" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden items-end sm:items-center justify-center p-0 sm:p-4">
+    <!-- ============================================================== -->
+  <!-- MODAL: EXPORTAR CATÁLOGO / LISTA DE PRECIOS A WHATSAPP         -->
+  <!-- ============================================================== -->
+  <div id="modalExportarCatalogo" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in">
+    <div class="bg-slate-900 border border-slate-800 rounded-t-3xl sm:rounded-3xl max-w-lg w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto animate-slide-up shadow-2xl">
+      <!-- Encabezado Modal -->
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div class="flex items-center gap-2">
+          <div class="p-2.5 rounded-xl bg-emerald-500/20 text-emerald-400">
+            <i data-lucide="share-2" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h3 class="text-base font-bold text-white">Exportar Catálogo para WhatsApp</h3>
+            <p class="text-xs text-slate-400">Precios actualizados y existencias disponibles</p>
+          </div>
+        </div>
+        <button onclick="cerrarModalExportarCatalogo()" class="p-1.5 text-slate-400 hover:text-white active:scale-95">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Opciones de Configuración del Exportable -->
+      <div class="grid grid-cols-2 gap-3 text-xs font-semibold">
+        <div>
+          <label class="block text-slate-400 text-[11px] uppercase font-bold mb-1">Filtro de Productos:</label>
+          <select id="exportFiltroStock" onchange="actualizarVistaPreviaExportarCatalogo()" class="w-full px-3 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-white text-xs">
+            <option value="constock">📦 Solo con Stock (> 0)</option>
+            <option value="todos">📋 Todo el Catálogo</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-slate-400 text-[11px] uppercase font-bold mb-1">Categoría:</label>
+          <select id="exportFiltroCategoria" onchange="actualizarVistaPreviaExportarCatalogo()" class="w-full px-3 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-white text-xs">
+            <option value="Todas">Todas las categorías</option>
+          </select>
+        </div>
+        <div class="col-span-2 flex items-center justify-between px-3.5 py-2.5 bg-slate-950/70 border border-slate-800 rounded-xl">
+          <span class="text-slate-300 text-xs font-medium">Mostrar cantidad de unidades disponibles:</span>
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" id="exportMostrarCantidades" onchange="actualizarVistaPreviaExportarCatalogo()" class="sr-only peer" checked>
+            <div class="w-10 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+          </label>
+        </div>
+      </div>
+
+      <!-- Resumen y Vista Previa -->
+      <div>
+        <div class="flex items-center justify-between text-xs mb-1.5 px-1">
+          <span class="font-bold text-slate-400 uppercase text-[10px] tracking-wider">Vista Previa (<span id="exportItemsCount" class="text-emerald-400 font-bold">0</span> licores):</span>
+          <button type="button" onclick="actualizarVistaPreviaExportarCatalogo()" class="text-xs text-indigo-400 hover:text-indigo-300 font-bold flex items-center gap-1">
+            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> Refrescar
+          </button>
+        </div>
+        <textarea id="exportPreviewText" readonly rows="9" class="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-2xl text-xs font-mono text-emerald-300/90 select-all focus:outline-none resize-none leading-relaxed"></textarea>
+      </div>
+
+      <!-- Botones de Acción -->
+      <div class="grid grid-cols-2 gap-3 pt-2 border-t border-slate-800">
+        <button type="button" onclick="copiarTextoCatalogoWhatsApp()" class="py-3 px-4 bg-slate-800 hover:bg-slate-750 border border-slate-700 active:scale-95 text-slate-200 font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-all">
+          <i data-lucide="copy" class="w-4 h-4 text-amber-400"></i>
+          <span>Copiar Texto</span>
+        </button>
+        <button type="button" onclick="enviarCatalogoWhatsAppDirecto()" class="py-3 px-4 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/30 transition-all">
+          <i data-lucide="message-circle" class="w-4 h-4"></i>
+          <span>Abrir WhatsApp</span>
+        </button>
+      </div>
+    </div>
+  </div>
+<div id="modalProducto" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden items-end sm:items-center justify-center p-0 sm:p-4">
     <div class="bg-slate-900 border border-slate-800 rounded-t-3xl sm:rounded-3xl max-w-md w-full p-5 space-y-4 max-h-[90vh] overflow-y-auto animate-slide-up">
       <div class="flex items-center justify-between border-b border-slate-800 pb-3">
         <h3 id="modalProductoTitulo" class="text-base font-bold text-white flex items-center gap-2">
@@ -2451,8 +2524,27 @@
     </div>
   </div>
 
+  <!-- OVERLAY DE BLOQUEO DE PANTALLA DURANTE SINCRONIZACIÓN -->
+  <div id="syncBlockingOverlay" class="fixed inset-0 z-[9999] bg-slate-950/85 backdrop-blur-md hidden flex-col items-center justify-center p-6 select-none transition-all duration-300">
+    <div class="max-w-sm w-full bg-slate-900 border border-emerald-500/40 rounded-3xl p-6 shadow-2xl text-center space-y-4">
+      <div class="relative w-16 h-16 mx-auto flex items-center justify-center">
+        <div class="absolute inset-0 rounded-full border-4 border-emerald-500/20"></div>
+        <div class="absolute inset-0 rounded-full border-4 border-emerald-400 border-t-transparent animate-spin"></div>
+        <i data-lucide="cloud-sync" class="w-7 h-7 text-emerald-400"></i>
+      </div>
+      <div>
+        <h3 class="text-base font-black text-white tracking-wide">Sincronizando con Google Sheets</h3>
+        <p class="text-xs text-slate-400 mt-1">Por favor espera un momento, no cierres la aplicación...</p>
+      </div>
+      <div class="px-4 py-2.5 bg-slate-950/80 border border-slate-800 rounded-2xl">
+        <p id="syncBlockingOverlayStatus" class="text-xs font-bold text-emerald-300 font-mono">Preparando envío...</p>
+      </div>
+      <p class="text-[11px] text-slate-500">La pantalla se desbloqueará automáticamente al terminar.</p>
+    </div>
+  </div>
+
   <!-- Application Logic -->
-  <script src="app.js?v=20260911_02"></script>
+  <script src="app.js?v=20260913_03"></script>
   <!-- Desktop Admin Experience Controller -->
   <script src="admin.js?v=20260911_02"></script>
 </body>
