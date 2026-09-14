@@ -1442,45 +1442,57 @@ function generarTextoCatalogoWhatsApp() {
 
   const negocio = state.config.nombreNegocio || "DC EL DESTAPE LICORES";
   const telefono = state.config.telefonoNegocio || "+506 8992-7936";
-  const fechaHoy = new Date().toLocaleDateString("es-CR", { day: "2-digit", month: "long", year: "numeric" });
+  const fechaHoy = new Date().toLocaleDateString("es-CR", { day: "2-digit", month: "short", year: "numeric" });
 
-  let texto = `🍷 *${negocio.toUpperCase()}* 🍷\n`;
-  texto += `📋 *LISTA DE PRECIOS & DISPONIBILIDAD*\n`;
-  texto += `📅 *Actualizado:* ${fechaHoy}\n`;
-  texto += `📱 *Pedidos:* ${telefono}\n`;
-  texto += `------------------------------------\n`;
+  const getEmojiCategoria = (cat = "") => {
+    const c = cat.toUpperCase();
+    if (c.includes("WHISKY") || c.includes("WHISKEY") || c.includes("BOURBON")) return "🥃";
+    if (c.includes("RON")) return "🍹";
+    if (c.includes("TEQUILA")) return "🌵";
+    if (c.includes("VODKA") || c.includes("GIN")) return "🍸";
+    if (c.includes("VINO") || c.includes("CHAMPAGNE")) return "🍷";
+    if (c.includes("CREMA")) return "☕";
+    if (c.includes("CERVEZA")) return "🍺";
+    return "🍾";
+  };
+
+  let texto = `✨━━━━━━━━━━━━━━━━━✨\n`;
+  texto += `🥂 *${negocio.toUpperCase()}* 🥂\n`;
+  texto += `📋 *MENÚ DE PRECIOS & DISPONIBILIDAD*\n`;
+  texto += `🗓️ ${fechaHoy}  •  📱 ${telefono}\n`;
+  texto += `✨━━━━━━━━━━━━━━━━━✨\n`;
 
   if (prods.length === 0) {
-    texto += `_No hay productos disponibles con los filtros seleccionados._\n`;
+    texto += `\n_No hay productos disponibles con los filtros seleccionados._\n`;
   } else {
-    // Agrupar por categoría
     let catActual = "";
     prods.forEach(p => {
       const cat = (p.categoria || "GENERAL").toUpperCase();
       if (cat !== catActual) {
         catActual = cat;
-        texto += `\n📌 *${catActual}*\n`;
+        const emoji = getEmojiCategoria(catActual);
+        texto += `\n${emoji} ━━ *${catActual}* ━━\n`;
       }
 
       const st = stockMap[p.codigo] || 0;
       const precioCRC = fmtCRC(p.precioVentaCRC || 0);
-      const precioUSD = p.precioVentaUSD ? ` _(${fmtUSD(p.precioVentaUSD)})_` : "";
       
-      let detalleStock = "";
+      let badgeStock = "";
       if (mostrarCantidades) {
-        detalleStock = st > 0 ? ` [${st} disp.]` : ` [Bajo pedido]`;
+        badgeStock = st > 0 ? ` _(🟢 ${st} disp.)_` : ` _(⏳ Encargo)_`;
       }
 
-      texto += `• *${p.nombre}*${detalleStock}\n   ↳ ${precioCRC}${precioUSD}\n`;
+      // Formato limpio solo en colones
+      texto += `▫️ *${p.nombre}*${badgeStock}\n    💰 *${precioCRC}*\n`;
     });
   }
 
-  texto += `\n------------------------------------\n`;
-  texto += `🛵 *Entregas y envíos a convenir.*\n\n`;
-  texto += `📱 *Síguenos en nuestras Redes Sociales:*\n`;
-  texto += `📷 *Instagram:* https://www.instagram.com/dceldestape\n`;
-  texto += `🔵 *Facebook:* https://www.facebook.com/share/1CHT3FRSc6/\n\n`;
-  texto += `¡Escríbenos para apartar tus licores favoritos! 🥂`;
+  texto += `\n━━━━━━━━━━━━━━━━━━━━\n`;
+  texto += `🛵 *Entregas y envíos a convenir*\n`;
+  texto += `📲 *Instagram:* instagram.com/dceldestape\n`;
+  texto += `🔵 *Facebook:* facebook.com/share/1CHT3FRSc6/\n`;
+  texto += `━━━━━━━━━━━━━━━━━━━━\n`;
+  texto += `¡Escríbenos para apartar tus licores favoritos! 🥂✨`;
 
   return { texto, count: prods.length };
 }
