@@ -1635,16 +1635,13 @@
           </div>
         </div>
 
-        <!-- Stock and Stock Minimo -->
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="block font-semibold text-slate-300 mb-1">Stock Inicial / Actual *</label>
-            <input type="number" id="prodStock" required min="0" value="0" class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-mono font-bold">
-          </div>
-          <div>
-            <label class="block font-semibold text-slate-300 mb-1">Stock Mínimo (Alerta)</label>
-            <input type="number" id="prodStockMinimo" min="0" value="2" class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-mono">
-          </div>
+        <!-- Stock Inicial oculto (no se usa: el stock se calcula desde compras - ventas) -->
+        <input type="hidden" id="prodStock" value="0">
+
+        <!-- Stock Minimo -->
+        <div>
+          <label class="block font-semibold text-slate-300 mb-1">Stock Mínimo (Alerta)</label>
+          <input type="number" id="prodStockMinimo" min="0" value="2" class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-mono">
         </div>
 
         <!-- Submit & Delete actions -->

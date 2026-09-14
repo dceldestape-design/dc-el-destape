@@ -335,11 +335,11 @@ function calcularStockDetalladoPorCodigo() {
   Object.values(state.productos).forEach(p => {
     const cod = String(p.codigo || "").trim().toUpperCase();
     if (!cod) return;
-    const init = parseNum(p.stockInicial !== undefined ? p.stockInicial : p.stock, 0);
+    const init = 0; // Stock se calcula 100% desde compras - ventas; ignorar Stock_Actual de Sheets
     detalle[cod] = {
-      Carlos: init,
+      Carlos: 0,
       Daniel: 0,
-      total: init
+      total: 0
     };
   });
 
@@ -3036,7 +3036,7 @@ function abrirModalProducto(productoOcodigo = null) {
     
     document.getElementById("prodPrecioVentaUSD").value = pUSD;
     document.getElementById("prodPrecioVentaCRC").value = Number(producto.precioVentaCRC || 0);
-    document.getElementById("prodStock").value = Number(producto.stockInicial || 0);
+    document.getElementById("prodStock").value = 0; // No se usa: el stock real viene de compras/ventas
     document.getElementById("prodStockMinimo").value = Number(producto.stockMinimo || 2);
     
     calcularMargenYPrecioRecomendado('costoUSD', false);
@@ -3138,7 +3138,7 @@ async function guardarProductoForm(e) {
   const precioVentaCRC = Number(document.getElementById("prodPrecioVentaCRC").value) || 0;
   const costoRefUSD = Number(document.getElementById("prodCostoRefUSD").value) || 0;
   const costoRefCRC = Number(document.getElementById("prodCostoRefCRC").value) || 0;
-  const stockInicial = Number(document.getElementById("prodStock").value) || 0;
+  const stockInicial = 0; // No se usa: el stock se calcula dinámicamente desde compras - ventas
   const stockMinimo = Number(document.getElementById("prodStockMinimo").value) || 2;
 
   const prodObj = {
@@ -5464,7 +5464,7 @@ async function exportarLibroExcel() {
     imagenUrl: p.imagenUrl || "",
     precioVentaUSD: p.precioVentaUSD || 0,
     precioVentaCRC: p.precioVentaCRC || 0,
-    stockInicial: p.stockInicial || 0,
+    stockInicial: 0, // Stock se calcula desde compras - ventas; no exportar Stock_Actual de Sheets
     costoRefUSD: p.costoRefUSD || 0,
     costoRefCRC: p.costoRefCRC || 0
   }));
@@ -5574,7 +5574,7 @@ async function importarArchivoExcel(event) {
                 imagenUrl: String(r.imagenUrl || r.Imagen_URL || r.imagen || r.foto || "").trim(),
                 precioVentaUSD: Number(r.precioVentaUSD || r.PrecioVentaUSD || 0),
                 precioVentaCRC: Number(r.precioVentaCRC || r.PrecioVentaCRC || 0),
-                stockInicial: Number(r.stockInicial || r.StockInicial || 0),
+                stockInicial: 0, // No se importa: el stock se calcula desde compras - ventas
                 costoRefUSD: Number(r.costoRefUSD || r.CostoRefUSD || 0),
                 costoRefCRC: Number(r.costoRefCRC || r.CostoRefCRC || 0)
               };
@@ -5987,7 +5987,7 @@ async function _descargarDatosSheets(mostrarMensaje = false) {
               p.costoRefCRC = parseNum(p.costoRefCRC, 0);
               p.precioVentaUSD = parseNum(p.precioVentaUSD, 0);
               p.precioVentaCRC = parseNum(p.precioVentaCRC, 0);
-              p.stockInicial = parseNum(p.stockInicial !== undefined ? p.stockInicial : p.stock, 0);
+              p.stockInicial = 0; // Neutralizar: el stock real viene de compras - ventas (no de Stock_Actual en Sheets)
               p.stockMinimo = parseNum(p.stockMinimo, 2);
               p.imagenUrl = String(p.imagenUrl || p.imagen || "").trim();
               mapa[cod] = p;
