@@ -7,6 +7,9 @@
  * sincronización bidireccional con Google Sheets.
  */
 
+// --- Token de Autenticación Centralizado (Apps Internas) ---
+const PORTAL_TOKEN = "dc_sec_EQE1RFEi6q3rMeXkjUUQQj5Q4u7sSbxx";
+
 // --- Formatters ---
 const fmtUSD = (n) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(
@@ -52,6 +55,7 @@ let state = {
   filtroPreventaComision: "todos", // "todos" o nombre del preventista
   filtroCuentas: "",
   filtroTipoCuenta: "Por Cobrar", // "Por Cobrar" | "Por Pagar" | "todos"
+  filtroMovimientosDashboard: "pendientes", // "pendientes" | "todos"
   modoPOS: "venta", // "venta" | "pedido"
   config: {
     sheetsUrl: "",
@@ -90,8 +94,8 @@ document.addEventListener("DOMContentLoaded", () => {
   actualizarIndicadorOffline();
   renderizarTodo();
 
-  // Registrar Service Worker PWA para soporte Offline-First
-  if ('serviceWorker' in navigator) {
+  // Registrar Service Worker PWA para soporte Offline-First (solo en http:// o https://)
+  if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.protocol === 'http:')) {
     navigator.serviceWorker.register('./sw.js').then((reg) => {
       reg.update();
     }).catch(() => {});
@@ -727,32 +731,41 @@ function renderizarDashboard() {
   // --- Pedidos Pendientes de Clientes (filtrados por vista) ---
   renderizarConsolidadoPedidosDashboard();
 
-  // Últimas ventas / movimientos filtrados por la vista activa
+  // Sub-pestañas y filtrado de Últimos Movimientos en Dashboard
   const recentCont = document.getElementById("dashRecentSales");
   let ventasFiltradas = state.ventas || [];
   if (vista !== "Consolidado") {
     ventasFiltradas = ventasFiltradas.filter(v => String(v.vendedor || "Carlos").trim() === vista);
   }
 
-  if (ventasFiltradas.length === 0) {
-    recentCont.innerHTML = `<div class="text-center py-5 text-slate-500 text-xs">No hay ventas registradas aún para ${vista === "Consolidado" ? "la empresa" : vista}.</div>`;
-  } else {
-    const ultimas = ventasFiltradas.slice(0, 10);
-    recentCont.innerHTML = ultimas.map((v, idx) => {
-      const fecha = v.fecha ? new Date(v.fecha).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : "";
-      const vend = v.vendedor || "Carlos";
-      const vendColor = vend === "Daniel" ? "text-violet-400 bg-violet-950/60 border-violet-500/30" : "text-blue-400 bg-blue-950/60 border-blue-500/30";
-      const totCRC = parseNum(v.totalCRC !== undefined ? v.totalCRC : v.totalFinalCRC, 0);
-      const totUSD = parseNum(v.totalUSD, 0);
-      const envioCRC = parseNum(v.costoEnvioCRC, 0);
-      const envioUSD = parseNum(v.costoEnvioUSD, 0);
-      const vCod = v.codigo || (v.items && v.items[0] ? v.items[0].codigo : '') || '';
-      const vUid = v.id ? `${v.id}_${vCod}_${idx}` : `VTA_ROW_${idx}`;
-      const esPagoLuego = String(v.metodoPago || "").toLowerCase().includes("luego") || String(v.metodoPago || "").toLowerCase().includes("crédito");
-      const originalIdx = state.ventas.indexOf(v);
+  const filtroMov = state.filtroMovimientosDashboard || "pendientes";
+  const tabPend = document.getElementById("tabDashMov-pendientes");
+  const tabTodos = document.getElementById("tabDashMov-todos");
 
-      // Buscar si existe una cuenta asociada a ESTE movimiento específico
-      const cuentaAsociada = (state.cuentas || []).find(cta => 
+  if (tabPend && tabTodos) {
+    if (filtroMov === "pendientes") {
+      tabPend.className = "py-1.5 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm flex items-center justify-center gap-1.5 active:scale-95 transition-all";
+      tabTodos.className = "py-1.5 rounded-lg bg-transparent text-slate-400 border border-transparent hover:text-white flex items-center justify-center gap-1.5 active:scale-95 transition-all";
+    } else {
+      tabTodos.className = "py-1.5 rounded-lg bg-indigo-600 text-white shadow-sm flex items-center justify-center gap-1.5 active:scale-95 transition-all";
+      tabPend.className = "py-1.5 rounded-lg bg-transparent text-slate-400 border border-transparent hover:text-white flex items-center justify-center gap-1.5 active:scale-95 transition-all";
+    }
+  }
+
+  // Pre-calcular metadatos de cuentas y estado de cada venta
+  const cuentasMap = new Map();
+  (state.cuentas || []).forEach(cta => {
+    if (cta.tipo === "Por Cobrar" && cta.referenciaId) {
+      cuentasMap.set(cta.referenciaId, cta);
+    }
+  });
+
+  const ventasConMeta = ventasFiltradas.map((v, idx) => {
+    const vCod = v.codigo || (v.items && v.items[0] ? v.items[0].codigo : '') || '';
+    const vUid = v.id ? `${v.id}_${vCod}_${idx}` : `VTA_ROW_${idx}`;
+    const esPagoLuego = String(v.metodoPago || "").toLowerCase().includes("luego") || String(v.metodoPago || "").toLowerCase().includes("crédito");
+    const cuentaAsoc = cuentasMap.get(vUid) || (v.id ? cuentasMap.get(v.id) : null) ||
+      (state.cuentas || []).find(cta =>
         cta.tipo === "Por Cobrar" && (
           cta.referenciaId === vUid ||
           (v.id && cta.referenciaId === v.id) ||
@@ -760,23 +773,89 @@ function renderizarDashboard() {
         )
       );
 
+    const esPagada = (cuentaAsoc && (cuentaAsoc.estado === "Pagado" || parseNum(cuentaAsoc.saldoPendienteCRC, 0) <= 0));
+    const esPendienteCobro = (cuentaAsoc && !esPagada) || (esPagoLuego && !esPagada);
+    const saldoPendiente = cuentaAsoc ? parseNum(cuentaAsoc.saldoPendienteCRC, parseNum(v.totalCRC, 0)) : (esPagoLuego ? parseNum(v.totalCRC, 0) : 0);
+
+    return {
+      venta: v,
+      idx: idx,
+      originalIdx: state.ventas.indexOf(v),
+      cuentaAsociada: cuentaAsoc,
+      esPagoLuego: esPagoLuego,
+      esPendienteCobro: esPendienteCobro,
+      saldoPendiente: saldoPendiente,
+      fechaNum: new Date(v.fecha || 0).getTime()
+    };
+  });
+
+  // Contadores de las sub-pestañas
+  const totalPendientesCount = ventasConMeta.filter(item => item.esPendienteCobro).length;
+  const countPendEl = document.getElementById("dashMovPendientesCount");
+  const countTodosEl = document.getElementById("dashMovTodosCount");
+  if (countPendEl) countPendEl.textContent = totalPendientesCount;
+  if (countTodosEl) countTodosEl.textContent = ventasFiltradas.length;
+
+  // Filtrado y ordenación según la sub-pestaña activa
+  let itemsAMostrar = [];
+  if (filtroMov === "pendientes") {
+    // Pestaña "Por Cobrar": Solo pendientes, ordenados con mayor saldo pendiente de primero, luego más recientes
+    itemsAMostrar = ventasConMeta.filter(item => item.esPendienteCobro);
+    itemsAMostrar.sort((a, b) => {
+      const saldoDiff = b.saldoPendiente - a.saldoPendiente;
+      if (saldoDiff !== 0) return saldoDiff;
+      return b.fechaNum - a.fechaNum;
+    });
+  } else {
+    // Pestaña "Todos": ordenado estrictamente del último (más reciente) al más viejo
+    itemsAMostrar = [...ventasConMeta];
+    itemsAMostrar.sort((a, b) => b.fechaNum - a.fechaNum);
+  }
+
+  if (itemsAMostrar.length === 0) {
+    if (filtroMov === "pendientes") {
+      recentCont.innerHTML = `
+        <div class="text-center py-6 text-slate-500 text-xs space-y-1 bg-slate-900/40 rounded-xl border border-slate-800">
+          <i data-lucide="badge-check" class="w-8 h-8 mx-auto text-emerald-500/70 mb-1"></i>
+          <p class="font-bold text-slate-300">¡Al día! No hay ventas pendientes de cobro 🎉</p>
+          <p class="text-[11px] text-slate-500">Todas las ventas están cobradas o liquidadas.</p>
+        </div>
+      `;
+    } else {
+      recentCont.innerHTML = `<div class="text-center py-5 text-slate-500 text-xs">No hay movimientos registrados para ${vista === "Consolidado" ? "la empresa" : vista}.</div>`;
+    }
+  } else {
+    const listaFinal = itemsAMostrar.slice(0, 15);
+    recentCont.innerHTML = listaFinal.map(({ venta: v, idx, originalIdx, cuentaAsociada, esPagoLuego, esPendienteCobro, saldoPendiente }) => {
+      const fecha = v.fecha ? new Date(v.fecha).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : "";
+      const vend = v.vendedor || "Carlos";
+      const vendColor = vend === "Daniel" ? "text-violet-400 bg-violet-950/60 border-violet-500/30" : "text-blue-400 bg-blue-950/60 border-blue-500/30";
+      const totCRC = parseNum(v.totalCRC !== undefined ? v.totalCRC : v.totalFinalCRC, 0);
+      const totUSD = parseNum(v.totalUSD, 0);
+      const envioCRC = parseNum(v.costoEnvioCRC, 0);
+      const envioUSD = parseNum(v.costoEnvioUSD, 0);
+
       // Determinar estado real de la cuenta
       let estadoBadgeHtml = '';
       if (cuentaAsociada) {
         const est = cuentaAsociada.estado || "Pendiente";
-        if (est === "Pagado") {
+        if (est === "Pagado" || parseNum(cuentaAsociada.saldoPendienteCRC, 0) <= 0) {
           estadoBadgeHtml = `<span class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-950/80 border border-emerald-500/40 text-emerald-300">✅ Liquidada</span>`;
         } else if (est === "Parcial") {
-          estadoBadgeHtml = `<span class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-950/80 border border-amber-500/40 text-amber-300">⏳ Abono Parcial</span>`;
+          estadoBadgeHtml = `<span class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-950/80 border border-amber-500/40 text-amber-300">⏳ Abono Parcial (Resta: ${fmtCRC(saldoPendiente)})</span>`;
         } else {
-          estadoBadgeHtml = `<span class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-rose-950/80 border border-rose-500/40 text-rose-300">🕒 Por Cobrar</span>`;
+          estadoBadgeHtml = `<span class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-rose-950/80 border border-rose-500/40 text-rose-300">🔴 Debe: ${fmtCRC(saldoPendiente)}</span>`;
         }
       } else if (esPagoLuego) {
-        estadoBadgeHtml = `<span class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-950/60 border border-amber-500/40 text-amber-300">🕒 Pago Luego</span>`;
+        estadoBadgeHtml = `<span class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-950/60 border border-amber-500/40 text-amber-300">🕒 Pago Luego (${fmtCRC(totCRC)})</span>`;
       }
 
+      const bgCardItem = esPendienteCobro && filtroMov === "pendientes"
+        ? "bg-amber-950/20 border border-amber-500/30 p-2.5 rounded-xl"
+        : "py-2.5 border-b border-slate-800/60 last:border-0";
+
       return `
-        <div class="py-2.5 flex items-center justify-between border-b border-slate-800/60 last:border-0 gap-2">
+        <div class="flex items-center justify-between ${bgCardItem} gap-2 transition-all">
           <div class="min-w-0 flex-1">
             <div class="flex items-center gap-1.5 mb-0.5 flex-wrap">
               <span class="text-[9px] font-bold px-1.5 py-0.2 rounded border ${vendColor}">👤 ${vend}</span>
@@ -798,7 +877,7 @@ function renderizarDashboard() {
             ${envioCRC > 0 ? `
               <div class="text-[10px] text-amber-300 font-mono mt-1 bg-amber-950/60 border border-amber-500/40 rounded px-1.5 py-0.5 inline-flex items-center gap-1">
                 <span>🚚</span>
-                <span>En factura <b>${v.id || 'N/A'}</b> se pagó el monto de flete o envío: <b>${fmtCRC(envioCRC)}</b>${envioUSD > 0 ? ` (${fmtUSD(envioUSD)})` : ''}</span>
+                <span>Flete o envío pagado: <b>${fmtCRC(envioCRC)}</b>${envioUSD > 0 ? ` (${fmtUSD(envioUSD)})` : ''}</span>
               </div>
             ` : ''}
             ${v.pedidoOrigenId ? `
@@ -811,27 +890,22 @@ function renderizarDashboard() {
                     🙋 Tomó: ${v.pedidoOrigenVendedor}
                   </span>
                 ` : ''}
-                ${v.facturadoPor && v.facturadoPor !== v.vendedor ? `
-                  <span class="text-[9px] font-bold px-1.5 py-0.5 rounded border bg-emerald-950/70 border-emerald-500/40 text-emerald-300">
-                    🧾 Facturó: ${v.facturadoPor}
-                  </span>
-                ` : ''}
               </div>
             ` : ''}
           </div>
           <div class="text-right font-mono shrink-0 space-y-0.5">
-            <div class="text-xs font-black text-emerald-400">${fmtCRC(totCRC)}</div>
+            <div class="text-xs font-black ${esPendienteCobro ? 'text-amber-300' : 'text-emerald-400'}">${fmtCRC(totCRC)}</div>
             <div class="text-[10px] text-slate-400">${fmtUSD(totUSD)}</div>
             <div class="pt-0.5">
               ${!cuentaAsociada && !esPagoLuego ? `
                 <button onclick="pasarVentaIndividualACuentasPorCobrar(${originalIdx !== -1 ? originalIdx : idx})" title="Pasar a Cuentas por Cobrar" class="text-[9.5px] font-bold px-2 py-0.5 rounded bg-amber-950/60 hover:bg-amber-900 border border-amber-500/40 text-amber-300 active:scale-95 transition-all">
                   + Cta Cobrar
                 </button>
-              ` : (cuentaAsociada && cuentaAsociada.estado === "Pagado" ? `
+              ` : (cuentaAsociada && (cuentaAsociada.estado === "Pagado" || parseNum(cuentaAsociada.saldoPendienteCRC, 0) <= 0) ? `
                 <span class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-950/60 border border-emerald-500/30 text-emerald-300">Cobrado</span>
               ` : `
-                <button onclick="cambiarVista('cuentas')" title="Ver en Cuentas por Cobrar" class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-indigo-950/60 hover:bg-indigo-900 border border-indigo-500/40 text-indigo-300 active:scale-95 transition-all">
-                  Ver Cuenta
+                <button onclick="cambiarVista('cuentas')" title="Ver en Cuentas por Cobrar" class="text-[9px] font-bold px-2 py-0.5 rounded bg-amber-500 hover:bg-amber-400 text-slate-950 font-black active:scale-95 shadow-sm transition-all">
+                  Cobrar
                 </button>
               `)}
             </div>
@@ -840,6 +914,11 @@ function renderizarDashboard() {
       `;
     }).join("");
   }
+}
+
+function cambiarFiltroMovimientosDashboard(nuevoFiltro) {
+  state.filtroMovimientosDashboard = nuevoFiltro;
+  renderizarDashboard();
 }
 
 // ==========================================================================
@@ -854,13 +933,16 @@ function renderizarConsolidadoPedidosDashboard() {
 
   const vista = state.vistaVendedor || "Consolidado";
   const vendedoresPropios = ["Carlos", "Daniel"]; // Vendedores de la app principal
-  let pedidosPendientes = (state.pedidos || []).filter(p => p.estado === "pendiente" || !p.estado);
+  let pedidosPendientes = (state.pedidos || []).filter(p => {
+    const est = String(p.estado || "pendiente").trim().toLowerCase();
+    return est === "pendiente" || !est;
+  });
   if (vista !== "Consolidado") {
     // Mostrar: pedidos del vendedor seleccionado + pedidos de colaboradores externos (preventa)
     // Los pedidos externos siempre se muestran para que Carlos/Daniel los puedan atender
     pedidosPendientes = pedidosPendientes.filter(p => {
       const vend = String(p.vendedor || "Carlos").trim();
-      return vend === vista || !vendedoresPropios.includes(vend);
+      return vend.toLowerCase() === vista.toLowerCase() || !vendedoresPropios.some(vp => vp.toLowerCase() === vend.toLowerCase());
     });
   }
 
@@ -5933,10 +6015,10 @@ function actualizarBadgeConexion() {
 
 async function enviarPeticionSheets(accion, datos = {}) {
   if (!state.config.sheetsUrl) throw new Error("No hay URL de Sheets configurada.");
-  const payload = { action: accion, ...datos };
+  const payload = { action: accion, token: PORTAL_TOKEN, ...datos };
   
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 12000);
+  const timeoutId = setTimeout(() => controller.abort(), 30000);
 
   try {
     const res = await fetch(state.config.sheetsUrl, {
@@ -5962,7 +6044,7 @@ async function _descargarDatosSheets(mostrarMensaje = false) {
   if (icon) icon.classList.add("animate-spin");
 
   try {
-    const url = `${state.config.sheetsUrl}?action=getTodo&token=DCDestape2026TabernaVIP!&t=${Date.now()}`;
+    const url = `${state.config.sheetsUrl}?action=getTodo&token=${PORTAL_TOKEN}&t=${Date.now()}`;
     const resp = await fetch(url, { cache: "no-store" });
     const json = await resp.json();
 
@@ -6098,7 +6180,19 @@ async function _descargarDatosSheets(mostrarMensaje = false) {
 
       // 6. Pedidos: sincronizar Sheets + únicamente los pedidos pendientes en cola offline local
       if (json.data.pedidos !== undefined) {
-        const pedidosSheets = Array.isArray(json.data.pedidos) ? json.data.pedidos : [];
+        const rawPedidosSheets = Array.isArray(json.data.pedidos) ? json.data.pedidos : [];
+        const pedidosSheets = rawPedidosSheets.map(p => {
+          if (!p) return p;
+          const est = String(p.estado || "pendiente").trim().toLowerCase();
+          return {
+            ...p,
+            id: String(p.id || "").trim(),
+            estado: est,
+            vendedor: String(p.vendedor || "Carlos").trim(),
+            cliente: String(p.cliente || "Cliente General").trim()
+          };
+        }).filter(p => p && p.id);
+
         const idsPedidosSheets = new Set(pedidosSheets.map(p => p.id));
         const pedidosSoloLocales = (state.pedidos || []).filter(p =>
           p && p.id && !idsPedidosSheets.has(p.id) &&
@@ -6113,13 +6207,45 @@ async function _descargarDatosSheets(mostrarMensaje = false) {
         const cuentasSheets = Array.isArray(json.data.cuentas) ? json.data.cuentas : [];
         const cuentasLocalesMap = new Map((state.cuentas || []).map(c => [c.id, c]));
         
-        // Preservar metadatos locales de envío y ventaId si Sheets aún no los envía
+        // Cuentas con abonos o liquidaciones pendientes en la cola local
+        const abonosPendientesCola = new Map();
+        (state.colaSincronizacion || []).forEach(q => {
+          if (q.accion === "abonarCuenta" && q.datos && q.datos.id) {
+            abonosPendientesCola.set(String(q.datos.id).toLowerCase(), q.datos);
+          }
+        });
+
+        // Preservar metadatos locales y estado de liquidación reciente
         cuentasSheets.forEach(c => {
-          const loc = cuentasLocalesMap.get(c.id);
+          const loc = cuentasLocalesMap.get(c.id) || Array.from(cuentasLocalesMap.values()).find(l => l.referenciaId && l.referenciaId === c.referenciaId);
           if (loc) {
             if (!c.costoEnvioCRC && loc.costoEnvioCRC) c.costoEnvioCRC = loc.costoEnvioCRC;
             if (!c.costoEnvioUSD && loc.costoEnvioUSD) c.costoEnvioUSD = loc.costoEnvioUSD;
             if (!c.ventaId && loc.ventaId) c.ventaId = loc.ventaId;
+
+            // Si localmente ya estaba liquidada o tiene un abono pendiente en cola
+            const tieneAbonoEnCola = abonosPendientesCola.has(String(c.id).toLowerCase()) || (c.referenciaId && abonosPendientesCola.has(String(c.referenciaId).toLowerCase()));
+            if (loc.estado === "Pagado" || Number(loc.saldoPendienteCRC || 0) <= 0 || tieneAbonoEnCola) {
+              if (loc.estado === "Pagado" || Number(loc.saldoPendienteCRC || 0) <= 0) {
+                c.estado = "Pagado";
+                c.saldoPendienteCRC = 0;
+                c.saldoPendienteUSD = 0;
+              } else if (loc.saldoPendienteCRC !== undefined) {
+                c.saldoPendienteCRC = loc.saldoPendienteCRC;
+                c.saldoPendienteUSD = loc.saldoPendienteUSD;
+                c.estado = loc.estado;
+              }
+              if (loc.notas && !c.notas.includes(loc.notas)) {
+                c.notas = loc.notas;
+              }
+            }
+          }
+
+          // Normalizar estado
+          if (Number(c.saldoPendienteCRC || 0) <= 0 || String(c.estado || "").toLowerCase() === "pagado") {
+            c.estado = "Pagado";
+            c.saldoPendienteCRC = 0;
+            c.saldoPendienteUSD = 0;
           }
         });
 
@@ -6127,7 +6253,11 @@ async function _descargarDatosSheets(mostrarMensaje = false) {
         const cuentasSoloLocales = (state.cuentas || []).filter(c =>
           c && (c.id || c.referenciaId) &&
           !idsCuentasSheets.has(c.id) && !idsCuentasSheets.has(c.referenciaId) &&
-          (state.colaSincronizacion || []).some(q => q.datos && q.datos.cuenta && (q.datos.cuenta.id === c.id || q.datos.cuenta.referenciaId === c.referenciaId))
+          (state.colaSincronizacion || []).some(q => {
+            const cId = q.datos && (q.datos.id || (q.datos.cuenta && q.datos.cuenta.id));
+            const cRef = q.datos && (q.datos.referenciaId || (q.datos.cuenta && q.datos.cuenta.referenciaId));
+            return (cId === c.id || cRef === c.referenciaId || cId === c.referenciaId);
+          })
         );
         state.cuentas = [...cuentasSheets, ...cuentasSoloLocales];
         guardarCuentasLocal();
@@ -6154,7 +6284,8 @@ async function _descargarDatosSheets(mostrarMensaje = false) {
       }
     } else {
       console.warn("[SYNC] Respuesta inesperada:", json);
-      if (mostrarMensaje) mostrarToast("Error: Sheets no devolvió datos válidos.", "error");
+      const detalleError = json && json.error ? ` (${json.error})` : "";
+      if (mostrarMensaje) mostrarToast("Error: Sheets no devolvió datos válidos" + detalleError + ".", "error");
     }
   } catch (err) {
     console.error("[SYNC] Error al conectar:", err);
@@ -6206,7 +6337,7 @@ async function probarConexionSheets() {
   }
   mostrarToast("Probando conexión...", "info");
   try {
-    const resp = await fetch(`${url}?action=ping&token=DCDestape2026TabernaVIP!`);
+    const resp = await fetch(`${url}?action=ping&token=${PORTAL_TOKEN}`);
     const json = await resp.json();
     if (json.success) mostrarToast("¡Conexión Exitosa con Google Sheets! 🎉", "success");
   } catch(e) {
@@ -6221,7 +6352,7 @@ async function diagnosticarPedidos() {
   }
   mostrarToast("Consultando encargos en Sheets...", "info");
   try {
-    const resp = await fetch(`${state.config.sheetsUrl}?action=getPedidos&token=DCDestape2026TabernaVIP!&t=${Date.now()}`, { cache: "no-store" });
+    const resp = await fetch(`${state.config.sheetsUrl}?action=getPedidos&token=${PORTAL_TOKEN}&t=${Date.now()}`, { cache: "no-store" });
     const json = await resp.json();
     console.log("[DIAG] getPedidos completo:", json);
 

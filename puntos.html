@@ -417,6 +417,9 @@
   <!-- JAVASCRIPT LOGIC                                               -->
   <!-- ============================================================== -->
   <script>
+    // --- Token Público Restringido (Sólo consulta de puntos del cliente) ---
+    const PUBLIC_PORTAL_TOKEN = "dc_pub_Iltv0UdgAh364BlDJvekXQ";
+
     // --- ESTADO Y CONFIGURACIÓN ---
     const state = {
       sheetsUrl: "",
@@ -672,7 +675,7 @@
         }
 
         try {
-          const urlConParam = `${state.sheetsUrl}?action=consultarPuntos&token=DCDestape2026TabernaVIP!&telefono=${encodeURIComponent(tel)}&t=${Date.now()}`;
+          const urlConParam = `${state.sheetsUrl}?action=consultarPuntos&token=${PUBLIC_PORTAL_TOKEN}&telefono=${encodeURIComponent(tel)}&t=${Date.now()}`;
           const res = await fetch(urlConParam);
           const json = await res.json();
 
