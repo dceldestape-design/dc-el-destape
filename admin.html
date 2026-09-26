@@ -188,6 +188,11 @@
           <span>Comisiones Preventas</span>
         </button>
 
+        <button onclick="cambiarVista('ajustes')" id="navTab-ajustes" class="admin-nav-item w-full text-left text-purple-400 font-bold">
+          <i data-lucide="sliders" class="w-4 h-4 text-purple-400"></i>
+          <span>Ajustes & Toma Stock</span>
+        </button>
+
         <button onclick="cambiarVista('configuracion')" id="navTab-configuracion" class="admin-nav-item w-full text-left">
           <i data-lucide="settings" class="w-4 h-4"></i>
           <span>Configuración & Sheets</span>
@@ -1579,6 +1584,91 @@
       <div class="h-10"></div>
     </section>
 
+    <!-- ============================================================== -->
+    <!-- VIEW: AJUSTES Y TOMA FÍSICA DE INVENTARIO (DESKTOP)            -->
+    <!-- ============================================================== -->
+    <section id="viewAjustes" class="space-y-6 hidden">
+      <!-- Encabezado de la Vista Desktop -->
+      <div class="bg-gradient-to-r from-purple-950 via-slate-900 to-slate-950 border border-purple-500/40 rounded-3xl p-6 shadow-xl space-y-4">
+        <div class="flex items-center justify-between border-b border-purple-500/20 pb-4">
+          <div class="flex items-center gap-3">
+            <div class="p-3 rounded-2xl bg-purple-500/20 text-purple-400">
+              <i data-lucide="sliders" class="w-7 h-7"></i>
+            </div>
+            <div>
+              <h2 class="text-xl font-black text-white tracking-wide">Módulo de Ajustes y Toma Física de Inventario</h2>
+              <p class="text-xs text-purple-300/90 font-mono">Auditoría en tiempo real • Comparativa de Stock en Sistema vs Conteo Físico Real</p>
+            </div>
+          </div>
+          <button onclick="sincronizarConSheets(true)" title="Sincronizar con Google Sheets" class="px-4 py-2.5 bg-slate-800 hover:bg-slate-750 border border-slate-700 text-slate-200 text-xs font-bold rounded-xl flex items-center gap-2 active:scale-95 transition-all">
+            <i data-lucide="refresh-cw" class="w-4 h-4 text-purple-400"></i>
+            <span>Sincronizar Sheets</span>
+          </button>
+        </div>
+
+        <!-- Filtros y Selección de Responsable -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+          <div>
+            <label class="block text-[11px] uppercase font-bold text-slate-400 mb-1">Inventario a Auditar:</label>
+            <select id="ajusteFiltroInventario" onchange="renderizarModuloAjustes()" class="w-full px-3 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white font-bold focus:border-purple-500">
+              <option value="Consolidado">📦 Consolidado (Total General)</option>
+              <option value="Carlos">👤 Carlos</option>
+              <option value="Daniel">👤 Daniel</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-[11px] uppercase font-bold text-slate-400 mb-1">Ajustado por (Responsable):</label>
+            <select id="ajusteResponsable" class="w-full px-3 py-2.5 bg-slate-950 border border-purple-500/40 rounded-xl text-purple-300 font-bold focus:border-purple-400">
+              <option value="Carlos">Carlos</option>
+              <option value="Daniel">Daniel</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-[11px] uppercase font-bold text-slate-400 mb-1">Buscar Producto en Catálogo:</label>
+            <div class="relative">
+              <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-3"></i>
+              <input type="text" id="ajusteBusquedaInput" oninput="filtrarProductosAjuste()" placeholder="Código o nombre..." class="w-full pl-9 pr-3 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs placeholder:text-slate-500 focus:border-purple-500">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Layout en 2 Columnas: Catálogo para Toma Física vs Historial -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Columna Izquierda: Catálogo para Toma Física -->
+        <div class="bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-xl space-y-4">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+            <h3 class="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+              <i data-lucide="boxes" class="w-4 h-4 text-purple-400"></i>
+              <span>Catálogo para Toma de Inventario</span>
+            </h3>
+            <span id="ajustesTotalProdCount" class="text-xs text-slate-400 font-mono">0 productos</span>
+          </div>
+
+          <div id="ajustesListaProductos" class="space-y-2 max-h-[500px] overflow-y-auto pr-1">
+            <!-- Renderizado por JS -->
+          </div>
+        </div>
+
+        <!-- Columna Derecha: Historial de Ajustes Realizados -->
+        <div class="bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-xl space-y-4">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+            <h3 class="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+              <i data-lucide="history" class="w-4 h-4 text-purple-400"></i>
+              <span>Historial de Ajustes (<span id="ajustesHistorialCount">0</span>)</span>
+            </h3>
+            <span class="text-xs text-slate-500 font-mono">Auditoría y trazabilidad</span>
+          </div>
+
+          <div id="ajustesHistorialLista" class="space-y-2.5 max-h-[500px] overflow-y-auto pr-1">
+            <!-- Renderizado por JS -->
+          </div>
+        </div>
+      </div>
+
+      <div class="h-10"></div>
+    </section>
+
   </main>
   </div>
 
@@ -2541,7 +2631,7 @@
   </div>
 
   <!-- Application Logic -->
-  <script src="app.js?v=20260913_03"></script>
+  <script src="app.js?v=20260925_02"></script>
   <!-- Desktop Admin Experience Controller -->
   <script src="admin.js?v=20260911_02"></script>
 </body>

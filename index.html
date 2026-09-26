@@ -1429,6 +1429,87 @@
       <div style="height: 120px; width: 100%;" class="w-full block"></div>
     </section>
 
+    <!-- ============================================================== -->
+    <!-- VIEW: AJUSTES Y TOMA FÍSICA DE INVENTARIO                      -->
+    <!-- ============================================================== -->
+    <section id="viewAjustes" class="space-y-4 hidden">
+      <!-- Encabezado de la Vista -->
+      <div class="bg-gradient-to-r from-purple-950 via-slate-900 to-slate-950 border border-purple-500/40 rounded-3xl p-4 shadow-xl space-y-3">
+        <div class="flex items-center justify-between border-b border-purple-500/20 pb-2.5">
+          <div class="flex items-center gap-2.5">
+            <div class="p-2.5 rounded-2xl bg-purple-500/20 text-purple-400">
+              <i data-lucide="sliders" class="w-5 h-5"></i>
+            </div>
+            <div>
+              <h2 class="text-xs font-bold text-white uppercase tracking-wider">Ajustes y Toma Física</h2>
+              <p class="text-[10px] text-purple-300/90 font-mono">Auditoría de Stock • Conteo Real vs Sistema</p>
+            </div>
+          </div>
+          <button onclick="sincronizarConSheets(true)" title="Sincronizar con Google Sheets" class="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl active:scale-95 transition-all">
+            <i data-lucide="refresh-cw" class="w-4 h-4 text-purple-400"></i>
+          </button>
+        </div>
+
+        <!-- Selector de Vendedor y Modo de Auditoría -->
+        <div class="grid grid-cols-2 gap-2 text-xs">
+          <div>
+            <label class="block text-[10px] uppercase font-bold text-slate-400 mb-1">Inventario de:</label>
+            <select id="ajusteFiltroInventario" onchange="renderizarModuloAjustes()" class="w-full px-2.5 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white font-bold focus:border-purple-500">
+              <option value="Consolidado">📦 Consolidado (Total General)</option>
+              <option value="Carlos">👤 Carlos</option>
+              <option value="Daniel">👤 Daniel</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-[10px] uppercase font-bold text-slate-400 mb-1">Ajustado por (Responsable):</label>
+            <select id="ajusteResponsable" class="w-full px-2.5 py-2 bg-slate-950 border border-purple-500/40 rounded-xl text-purple-300 font-bold focus:border-purple-400">
+              <option value="Carlos">Carlos</option>
+              <option value="Daniel">Daniel</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Buscador Rápido de Producto -->
+        <div class="relative">
+          <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-3"></i>
+          <input type="text" id="ajusteBusquedaInput" oninput="filtrarProductosAjuste()" placeholder="Buscar producto por nombre o código..." class="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs placeholder:text-slate-500 focus:border-purple-500">
+        </div>
+      </div>
+
+      <!-- Lista de Catálogo para Toma Física Directa -->
+      <div class="bg-slate-900 border border-slate-800 rounded-3xl p-4 shadow-xl space-y-3">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+          <h3 class="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+            <i data-lucide="boxes" class="w-4 h-4 text-purple-400"></i>
+            <span>Catálogo para Toma de Inventario</span>
+          </h3>
+          <span id="ajustesTotalProdCount" class="text-[10px] text-slate-500 font-mono">0 productos</span>
+        </div>
+
+        <div id="ajustesListaProductos" class="space-y-2 max-h-[380px] overflow-y-auto pr-0.5">
+          <!-- Renderizado por JS -->
+        </div>
+      </div>
+
+      <!-- Historial de Ajustes Realizados -->
+      <div class="bg-slate-900 border border-slate-800 rounded-3xl p-4 shadow-xl space-y-3">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+          <h3 class="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+            <i data-lucide="history" class="w-4 h-4 text-purple-400"></i>
+            <span>Historial de Ajustes (<span id="ajustesHistorialCount">0</span>)</span>
+          </h3>
+          <span class="text-[10px] text-slate-500 font-mono">Auditoría</span>
+        </div>
+
+        <div id="ajustesHistorialLista" class="space-y-2 max-h-[300px] overflow-y-auto pr-0.5">
+          <!-- Renderizado por JS -->
+        </div>
+      </div>
+
+      <!-- Extra spacer for mobile bottom navigation -->
+      <div style="height: 120px; width: 100%;" class="w-full block"></div>
+    </section>
+
   </main>
 
   <!-- ============================================================== -->
@@ -2427,7 +2508,8 @@
         <button onclick="irDesdeMenuMas('compras')" class="p-3 rounded-2xl bg-slate-800 border border-slate-700 text-left active:scale-95"><i data-lucide="truck" class="w-5 h-5 text-amber-400 mb-2"></i><span class="block text-xs font-bold text-white">Compras</span><span class="text-[10px] text-slate-400">Entradas de inventario</span></button>
         <button onclick="irDesdeMenuMas('cuentas')" class="p-3 rounded-2xl bg-slate-800 border border-slate-700 text-left active:scale-95"><i data-lucide="badge-dollar-sign" class="w-5 h-5 text-rose-400 mb-2"></i><span class="block text-xs font-bold text-white">Cuentas</span><span class="text-[10px] text-slate-400">Cobros y pagos</span></button>
         <button onclick="irDesdeMenuMas('comisiones')" class="p-3 rounded-2xl bg-slate-800 border border-slate-700 text-left active:scale-95"><i data-lucide="badge-percent" class="w-5 h-5 text-emerald-400 mb-2"></i><span class="block text-xs font-bold text-white">Comisiones</span><span class="text-[10px] text-slate-400">Liquidaciones</span></button>
-        <button onclick="irDesdeMenuMas('finanzas')" class="p-3 rounded-2xl bg-slate-800 border border-slate-700 text-left active:scale-95"><i data-lucide="wallet" class="w-5 h-5 text-indigo-400 mb-2"></i><span class="block text-xs font-bold text-white">Finanzas</span><span class="text-[10px] text-slate-400">Caja y socios</span></button>
+        <button onclick="irDesdeMenuMas('ajustes')" class="p-3 rounded-2xl bg-slate-800 border border-purple-500/40 text-left active:scale-95"><i data-lucide="sliders" class="w-5 h-5 text-purple-400 mb-2"></i><span class="block text-xs font-bold text-white">Ajustes Stock</span><span class="text-[10px] text-purple-300">Toma física y conteo</span></button>
+        <button onclick="irDesdeMenuMas('finanzas')" class="col-span-2 p-3 rounded-2xl bg-slate-800 border border-slate-700 text-left active:scale-95 flex items-center gap-3"><i data-lucide="wallet" class="w-5 h-5 text-indigo-400"></i><span><span class="block text-xs font-bold text-white">Finanzas</span><span class="text-[10px] text-slate-400">Caja y socios</span></span></button>
         <button onclick="irDesdeMenuMas('configuracion')" class="col-span-2 p-3 rounded-2xl bg-slate-800 border border-slate-700 text-left active:scale-95 flex items-center gap-3"><i data-lucide="settings" class="w-5 h-5 text-slate-300"></i><span><span class="block text-xs font-bold text-white">Configuración y respaldo</span><span class="text-[10px] text-slate-400">Sincronización, exportación y ajustes</span></span></button>
       </div>
     </div>
@@ -2453,6 +2535,6 @@
   </div>
 
   <!-- Application Logic -->
-  <script src="app.js?v=20260920_04"></script>
+  <script src="app.js?v=20260925_02"></script>
 </body>
 </html>

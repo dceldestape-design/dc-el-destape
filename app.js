@@ -52,6 +52,8 @@ let state = {
   cuentas: [], // Lista de cuentas pendientes (Por Cobrar / Por Pagar)
   anulaciones: [], // Historial informativo de ventas anuladas
   liquidaciones: [], // Historial de comisiones liquidadas a preventistas
+  ajustes: [], // Historial de ajustes y toma física de inventario
+  productoSeleccionadoAjuste: null, // Producto activo para toma física
   filtroPreventaComision: "todos", // "todos" o nombre del preventista
   filtroCuentas: "",
   filtroTipoCuenta: "Por Cobrar", // "Por Cobrar" | "Por Pagar" | "todos"
@@ -289,6 +291,11 @@ function cargarEstadoLocal() {
     try { state.liquidaciones = JSON.parse(liqs); } catch(e) { state.liquidaciones = []; }
   }
 
+  const ajus = localStorage.getItem("inv_ajustes_v2");
+  if (ajus) {
+    try { state.ajustes = JSON.parse(ajus); } catch(e) { state.ajustes = []; }
+  }
+
   const savedVista = localStorage.getItem("inv_vista_vendedor");
   if (savedVista) {
     state.vistaVendedor = savedVista;
@@ -316,6 +323,9 @@ function guardarAnulacionesLocal() {
 }
 function guardarLiquidacionesLocal() {
   localStorage.setItem("inv_liquidaciones_v2", JSON.stringify(state.liquidaciones || []));
+}
+function guardarAjustesLocal() {
+  localStorage.setItem("inv_ajustes_v2", JSON.stringify(state.ajustes || []));
 }
 function guardarFinanzasLocal() {
   localStorage.setItem("inv_finanzas_v2", JSON.stringify(state.movimientosDinero));
@@ -404,6 +414,25 @@ function calcularStockDetalladoPorCodigo() {
       }
       detalle[cod].total -= cant;
     });
+  });
+
+  // 4. Aplicar Ajustes de Inventario (+ / -)
+  (state.ajustes || []).forEach(a => {
+    const cod = String(a.codigo || "").trim().toUpperCase();
+    if (!cod) return;
+    if (!detalle[cod]) detalle[cod] = { Carlos: 0, Daniel: 0, total: 0 };
+    const dif = parseNum(a.diferencia, 0);
+    const invDe = String(a.inventarioDe || a.ajustadoPor || "General").trim();
+
+    if (invDe === "Daniel") {
+      detalle[cod].Daniel += dif;
+    } else if (invDe === "Carlos") {
+      detalle[cod].Carlos += dif;
+    } else {
+      // General / Consolidado: distribuir equitativamente o en total
+      detalle[cod].Carlos += dif;
+    }
+    detalle[cod].total += dif;
   });
 
   return detalle;
@@ -500,7 +529,7 @@ function calcularCostosPorCodigo(vista = state.vistaVendedor) {
 // NAVEGACIÓN Y VISTAS
 // ==========================================================================
 function cambiarVista(vista) {
-  const vistas = ["dashboard", "inventario", "ventas", "compras", "finanzas", "configuracion", "clientes", "cuentas", "comisiones"];
+  const vistas = ["dashboard", "inventario", "ventas", "compras", "finanzas", "configuracion", "clientes", "cuentas", "comisiones", "ajustes"];
   
   vistas.forEach(v => {
     const el = document.getElementById("view" + capitalizar(v));
@@ -530,6 +559,7 @@ function cambiarVista(vista) {
   if (vista === "clientes") renderizarClientes();
   if (vista === "cuentas") renderizarCuentas();
   if (vista === "comisiones") renderizarModuloComisiones();
+  if (vista === "ajustes") renderizarModuloAjustes();
   if (vista === "configuracion") {
     cargarConfigPuntosUI();
     const surl = document.getElementById("sheetsApiUrl");
@@ -586,6 +616,7 @@ function renderizarTodo() {
   renderizarCuentas();
   renderizarHistorialAnulaciones();
   renderizarModuloComisiones();
+  renderizarModuloAjustes();
   inicializarIconos();
 }
 
@@ -5842,6 +5873,8 @@ function describirAccionSincronizacion(accion, datos) {
       return "Registrando liquidación de comisión...";
     case "eliminarLiquidacion":
       return "Eliminando liquidación...";
+    case "registrarAjuste":
+      return (datos.ajuste && datos.ajuste.nombre) ? ("Registrando ajuste de inventario (" + datos.ajuste.nombre + ")...") : "Registrando ajuste de inventario en Sheets...";
     default:
       return "Enviando " + accion + "...";
   }
@@ -6273,6 +6306,12 @@ async function _descargarDatosSheets(mostrarMensaje = false) {
       if (json.data.liquidaciones !== undefined) {
         state.liquidaciones = Array.isArray(json.data.liquidaciones) ? json.data.liquidaciones : [];
         guardarLiquidacionesLocal();
+      }
+
+      // 10. Ajustes: Reflejar hoja Ajustes de Sheets
+      if (json.data.ajustes !== undefined) {
+        state.ajustes = Array.isArray(json.data.ajustes) ? json.data.ajustes : [];
+        guardarAjustesLocal();
       }
 
       renderizarTodo();
@@ -7467,3 +7506,368 @@ function eliminarLiquidacionComision(idLiq) {
     procesarColaSincronizacion(false);
   }
 }
+
+// ==========================================================================
+// MÓDULO DE AJUSTES Y TOMA FÍSICA DE INVENTARIO (FRONTEND)
+// ==========================================================================
+
+let filtroBusquedaAjustes = "";
+
+function renderizarModuloAjustes() {
+  const selectInv = document.getElementById("ajusteFiltroInventario");
+  const vistaStock = selectInv ? selectInv.value : "Consolidado";
+  const stockMap = calcularStockPorCodigo(vistaStock);
+
+  // Asegurar que el responsable inicial coincida con el usuario activo
+  const respSelect = document.getElementById("ajusteResponsable");
+  if (respSelect && !respSelect.value) {
+    respSelect.value = state.vendedorActual || "Carlos";
+  }
+
+  // 1. Renderizar lista del catálogo con formulario de ajuste integrado en cada tarjeta
+  renderizarListaProductosAjuste(stockMap);
+
+  // 2. Renderizar historial de ajustes
+  renderizarHistorialAjustes();
+
+  inicializarIconos();
+}
+
+function filtrarProductosAjuste() {
+  const input = document.getElementById("ajusteBusquedaInput");
+  filtroBusquedaAjustes = input ? input.value.trim().toLowerCase() : "";
+  const selectInv = document.getElementById("ajusteFiltroInventario");
+  const vistaStock = selectInv ? selectInv.value : "Consolidado";
+  const stockMap = calcularStockPorCodigo(vistaStock);
+  renderizarListaProductosAjuste(stockMap);
+}
+
+function renderizarListaProductosAjuste(stockMap) {
+  const contenedor = document.getElementById("ajustesListaProductos");
+  const counter = document.getElementById("ajustesTotalProdCount");
+  if (!contenedor) return;
+
+  const prods = Object.values(state.productos || {});
+  const filtrados = prods.filter(p => {
+    if (!filtroBusquedaAjustes) return true;
+    const cod = String(p.codigo || "").toLowerCase();
+    const nom = String(p.nombre || "").toLowerCase();
+    const cat = String(p.categoria || "").toLowerCase();
+    return cod.includes(filtroBusquedaAjustes) || nom.includes(filtroBusquedaAjustes) || cat.includes(filtroBusquedaAjustes);
+  }).sort((a, b) => (a.nombre || a.codigo).localeCompare(b.nombre || b.codigo));
+
+  if (counter) counter.textContent = `${filtrados.length} productos`;
+
+  if (filtrados.length === 0) {
+    contenedor.innerHTML = `
+      <div class="p-6 text-center text-slate-500 text-xs">
+        <i data-lucide="package-search" class="w-8 h-8 mx-auto mb-2 text-slate-600"></i>
+        <p>No se encontraron productos coincidentes.</p>
+      </div>
+    `;
+    inicializarIconos();
+    return;
+  }
+
+  contenedor.innerHTML = filtrados.map(p => {
+    const cod = String(p.codigo || "").trim().toUpperCase();
+    const stockSistema = stockMap[cod] !== undefined ? stockMap[cod] : 0;
+    const estaAbierto = state.productoSeleccionadoAjuste === cod;
+
+    let badgeStockColor = "bg-slate-800 text-slate-300 border-slate-700";
+    if (stockSistema <= 0) badgeStockColor = "bg-rose-950/80 text-rose-300 border-rose-500/40";
+    else if (stockSistema < (p.stockMinimo || 2)) badgeStockColor = "bg-amber-950/80 text-amber-300 border-amber-500/40";
+    else badgeStockColor = "bg-emerald-950/80 text-emerald-300 border-emerald-500/40";
+
+    return `
+      <div class="rounded-2xl border transition-all ${estaAbierto ? 'bg-slate-900 border-purple-500 shadow-xl shadow-purple-500/10' : 'bg-slate-950/80 border-slate-800 hover:border-slate-750'}">
+        <!-- Fila Principal del Producto (Sin imágenes, limpia y directa) -->
+        <div onclick="toggleAjusteProducto('${cod}')" class="p-3 flex items-center justify-between gap-3 cursor-pointer select-none">
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2">
+              <span class="text-[10px] font-mono font-bold text-purple-400 bg-purple-950/60 px-1.5 py-0.5 rounded border border-purple-500/30">${cod}</span>
+              <span class="text-[10px] text-slate-500 font-medium">${p.categoria || 'General'}</span>
+            </div>
+            <h4 class="text-xs font-bold text-white truncate mt-1 leading-snug">${p.nombre || cod}</h4>
+          </div>
+
+          <div class="flex items-center gap-2.5 shrink-0">
+            <div class="text-right font-mono">
+              <span class="text-[8.5px] block text-slate-400 uppercase font-sans font-bold">Sistema</span>
+              <span class="px-2 py-0.5 rounded-lg border text-xs font-black ${badgeStockColor}">${stockSistema} uds</span>
+            </div>
+            <button type="button" class="w-8 h-8 rounded-xl flex items-center justify-center transition-all ${estaAbierto ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-300 hover:text-white'}">
+              <i data-lucide="${estaAbierto ? 'chevron-up' : 'sliders'}" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Panel de Ajuste Integrado Directo en la Tarjeta -->
+        ${estaAbierto ? `
+          <div class="p-3.5 border-t border-purple-500/30 bg-purple-950/20 rounded-b-2xl space-y-3 animate-fade-in" onclick="event.stopPropagation()">
+            
+            <!-- Comparativa de Conteo en Línea -->
+            <div class="grid grid-cols-3 gap-2 text-center font-mono">
+              <!-- Sistema -->
+              <div class="p-2 bg-slate-950 rounded-xl border border-slate-800">
+                <span class="block text-[8.5px] uppercase font-sans font-bold text-slate-400">En Sistema</span>
+                <span class="text-base font-black text-slate-200" id="itemStockSistema_${cod}">${stockSistema}</span>
+                <span class="block text-[8px] text-slate-500">uds</span>
+              </div>
+
+              <!-- Conteo Físico Real -->
+              <div class="p-1.5 bg-purple-950/50 rounded-xl border border-purple-500/50">
+                <span class="block text-[8.5px] uppercase font-sans font-bold text-purple-300">Conteo Real</span>
+                <div class="flex items-center justify-center gap-1 mt-0.5">
+                  <button type="button" onclick="ajustarPasoFisicoItem('${cod}', -1)" class="w-6 h-6 rounded-lg bg-slate-800 border border-slate-700 text-slate-200 font-bold active:scale-95 flex items-center justify-center text-xs hover:bg-slate-700">-</button>
+                  <input type="number" id="itemInputFisico_${cod}" oninput="calcularDiferenciaItem('${cod}', ${stockSistema})" min="0" step="1" value="${stockSistema}" class="w-12 text-center text-sm font-black text-white bg-slate-900 border border-purple-500/60 rounded-lg py-0.5 focus:outline-none focus:border-purple-400">
+                  <button type="button" onclick="ajustarPasoFisicoItem('${cod}', 1)" class="w-6 h-6 rounded-lg bg-slate-800 border border-slate-700 text-slate-200 font-bold active:scale-95 flex items-center justify-center text-xs hover:bg-slate-700">+</button>
+                </div>
+                <span class="block text-[8px] text-purple-400">físico</span>
+              </div>
+
+              <!-- Diferencia Resultante -->
+              <div id="itemBoxDiferencia_${cod}" class="p-2 bg-slate-950 rounded-xl border border-slate-800 flex flex-col justify-center">
+                <span class="block text-[8.5px] uppercase font-sans font-bold text-slate-400">Diferencia</span>
+                <span id="itemBadgeDiferencia_${cod}" class="text-sm font-black text-slate-400">0</span>
+                <span id="itemTextoImpacto_${cod}" class="block text-[8px] text-slate-400 font-sans font-semibold">Sin cambios</span>
+              </div>
+            </div>
+
+            <!-- Motivo de Ajuste Rápido -->
+            <div class="space-y-1 text-xs">
+              <label class="block text-[9.5px] uppercase font-bold text-slate-300">Motivo del Ajuste *</label>
+              <div class="grid grid-cols-2 gap-1 font-sans">
+                <button type="button" onclick="seleccionarMotivoItem('${cod}', 'Conteo físico periódico')" class="text-[9.5px] py-1 px-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 hover:border-purple-500 text-left truncate">📋 Conteo periódico</button>
+                <button type="button" onclick="seleccionarMotivoItem('${cod}', 'Merma o rotura')" class="text-[9.5px] py-1 px-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 hover:border-purple-500 text-left truncate">💥 Merma / rotura</button>
+                <button type="button" onclick="seleccionarMotivoItem('${cod}', 'Error de facturación/salida')" class="text-[9.5px] py-1 px-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 hover:border-purple-500 text-left truncate">🧾 Error facturación</button>
+                <button type="button" onclick="seleccionarMotivoItem('${cod}', 'Sobrante no registrado')" class="text-[9.5px] py-1 px-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 hover:border-purple-500 text-left truncate">📦 Sobrante bodega</button>
+              </div>
+              <input type="text" id="itemMotivoTexto_${cod}" placeholder="O escribe el motivo personalizado..." class="w-full mt-1 px-2.5 py-1.5 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white placeholder:text-slate-500 focus:border-purple-500">
+            </div>
+
+            <!-- Botones de Acción Directos -->
+            <div class="flex items-center gap-2 pt-1 font-sans">
+              <button type="button" onclick="guardarAjusteItemDirecto('${cod}')" class="flex-1 py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl text-xs shadow-md shadow-purple-600/30 active:scale-95 transition-all flex items-center justify-center gap-1.5">
+                <i data-lucide="check-circle" class="w-3.5 h-3.5"></i>
+                <span>Confirmar Ajuste</span>
+              </button>
+              <button type="button" onclick="toggleAjusteProducto('${cod}')" class="py-2.5 px-3 rounded-xl bg-slate-800 text-slate-400 hover:text-white text-xs font-semibold">
+                Cancelar
+              </button>
+            </div>
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }).join("");
+
+  inicializarIconos();
+}
+
+function toggleAjusteProducto(codigo) {
+  if (state.productoSeleccionadoAjuste === codigo) {
+    state.productoSeleccionadoAjuste = null;
+  } else {
+    state.productoSeleccionadoAjuste = codigo;
+  }
+
+  const selectInv = document.getElementById("ajusteFiltroInventario");
+  const vistaStock = selectInv ? selectInv.value : "Consolidado";
+  const stockMap = calcularStockPorCodigo(vistaStock);
+  renderizarListaProductosAjuste(stockMap);
+}
+
+function ajustarPasoFisicoItem(cod, paso) {
+  const inFis = document.getElementById(`itemInputFisico_${cod}`);
+  const elSistema = document.getElementById(`itemStockSistema_${cod}`);
+  if (!inFis) return;
+  let val = parseInt(inFis.value, 10);
+  if (isNaN(val)) val = 0;
+  val = Math.max(0, val + paso);
+  inFis.value = val;
+
+  const stockSistema = elSistema ? (parseInt(elSistema.textContent, 10) || 0) : 0;
+  calcularDiferenciaItem(cod, stockSistema);
+}
+
+function calcularDiferenciaItem(cod, stockSistema) {
+  const inFisico = document.getElementById(`itemInputFisico_${cod}`);
+  const badgeDif = document.getElementById(`itemBadgeDiferencia_${cod}`);
+  const txtImpacto = document.getElementById(`itemTextoImpacto_${cod}`);
+  const boxDif = document.getElementById(`itemBoxDiferencia_${cod}`);
+
+  if (!inFisico || !badgeDif || !txtImpacto || !boxDif) return;
+
+  let stockFisico = parseInt(inFisico.value, 10);
+  if (isNaN(stockFisico) || stockFisico < 0) stockFisico = 0;
+
+  const diferencia = stockFisico - stockSistema;
+
+  if (diferencia > 0) {
+    badgeDif.textContent = `+${diferencia}`;
+    badgeDif.className = "text-sm font-black text-emerald-400";
+    txtImpacto.textContent = `🟢 Sube +${diferencia}`;
+    txtImpacto.className = "block text-[8px] text-emerald-400 font-sans font-bold";
+    boxDif.className = "p-2 bg-emerald-950/40 rounded-xl border border-emerald-500/40 flex flex-col justify-center animate-pulse";
+  } else if (diferencia < 0) {
+    badgeDif.textContent = `${diferencia}`;
+    badgeDif.className = "text-sm font-black text-rose-400";
+    txtImpacto.textContent = `🔴 Baja ${diferencia}`;
+    txtImpacto.className = "block text-[8px] text-rose-400 font-sans font-bold";
+    boxDif.className = "p-2 bg-rose-950/40 rounded-xl border border-rose-500/40 flex flex-col justify-center animate-pulse";
+  } else {
+    badgeDif.textContent = "0";
+    badgeDif.className = "text-sm font-black text-slate-400";
+    txtImpacto.textContent = "Sin cambios";
+    txtImpacto.className = "block text-[8px] text-slate-400 font-sans font-semibold";
+    boxDif.className = "p-2 bg-slate-950 rounded-xl border border-slate-800 flex flex-col justify-center";
+  }
+}
+
+function seleccionarMotivoItem(cod, motivo) {
+  const inMot = document.getElementById(`itemMotivoTexto_${cod}`);
+  if (inMot) inMot.value = motivo;
+}
+
+function guardarAjusteItemDirecto(cod) {
+  const prod = state.productos[cod];
+  if (!prod) return;
+
+  const selectInv = document.getElementById("ajusteFiltroInventario");
+  const inventarioDe = selectInv ? selectInv.value : "Consolidado";
+  const stockMap = calcularStockPorCodigo(inventarioDe);
+  const stockSistema = stockMap[cod] !== undefined ? stockMap[cod] : 0;
+
+  const inFisico = document.getElementById(`itemInputFisico_${cod}`);
+  let stockFisico = parseInt(inFisico ? inFisico.value : "0", 10);
+  if (isNaN(stockFisico) || stockFisico < 0) {
+    mostrarToast("Ingresa un conteo físico válido mayor o igual a 0.", "error");
+    return;
+  }
+
+  const inResp = document.getElementById("ajusteResponsable");
+  const ajustadoPor = inResp ? inResp.value.trim() : (state.vendedorActual || "Carlos");
+
+  const inMot = document.getElementById(`itemMotivoTexto_${cod}`);
+  const motivo = inMot && inMot.value.trim() ? inMot.value.trim() : "Toma física de inventario";
+
+  const diferencia = stockFisico - stockSistema;
+
+  const mensajeConfirm = diferencia === 0
+    ? `El stock físico contado (${stockFisico}) es igual al del sistema. ¿Deseas registrar la auditoría sin cambios?`
+    : `¿Confirmar ajuste para ${prod.nombre} [${cod}]?\n\n• Stock anterior: ${stockSistema} uds\n• Stock físico contado: ${stockFisico} uds\n• Impacto: ${diferencia > 0 ? '+' + diferencia : diferencia} uds\n• Responsable: ${ajustadoPor}\n• Motivo: ${motivo}`;
+
+  if (!confirm(mensajeConfirm)) return;
+
+  const idAjuste = "AJU-" + UtilitiesDateLocal(new Date()) + "-" + Math.floor(Math.random() * 900 + 100);
+  const fechaHora = new Date().toLocaleString();
+
+  const ajusteObj = {
+    id: idAjuste,
+    fecha: fechaHora,
+    codigo: cod,
+    codigoProducto: cod,
+    nombre: prod.nombre || cod,
+    stockAnterior: stockSistema,
+    stockFisico: stockFisico,
+    diferencia: diferencia,
+    tipoAjuste: diferencia > 0 ? "INCREMENTO" : (diferencia < 0 ? "DISMINUCION" : "SIN_CAMBIOS"),
+    ajustadoPor: ajustadoPor,
+    inventarioDe: inventarioDe,
+    motivo: motivo
+  };
+
+  // 1. Guardar en estado local y persistencia
+  if (!state.ajustes) state.ajustes = [];
+  state.ajustes.unshift(ajusteObj);
+  guardarAjustesLocal();
+
+  // 2. Encolar sincronización con Google Sheets
+  encolarAccionSincronizacion("registrarAjuste", { ajuste: ajusteObj });
+
+  // 3. Notificación de éxito
+  const msgToast = diferencia > 0
+    ? `Ajuste aplicado: +${diferencia} uds para ${prod.nombre}`
+    : (diferencia < 0 ? `Ajuste aplicado: ${diferencia} uds para ${prod.nombre}` : `Auditoría registrada sin diferencias`);
+  mostrarToast(`✅ ${msgToast}`, "success");
+
+  // Cerrar panel del producto ajustado
+  state.productoSeleccionadoAjuste = null;
+
+  // Renderizar vistas impactadas
+  renderizarTodo();
+
+  // Si hay conexión, subir a Sheets de inmediato
+  if (state.config.sheetsUrl && navigator.onLine) {
+    procesarColaSincronizacion(false);
+  }
+}
+
+function renderizarHistorialAjustes() {
+  const contenedor = document.getElementById("ajustesHistorialLista");
+  const countBadge = document.getElementById("ajustesHistorialCount");
+  if (!contenedor) return;
+
+  const lista = state.ajustes || [];
+  if (countBadge) countBadge.textContent = lista.length;
+
+  if (lista.length === 0) {
+    contenedor.innerHTML = `
+      <div class="p-6 text-center text-slate-500 text-xs">
+        <i data-lucide="clipboard-list" class="w-8 h-8 mx-auto mb-2 text-slate-600"></i>
+        <p>No hay ajustes de inventario registrados aún.</p>
+      </div>
+    `;
+    inicializarIconos();
+    return;
+  }
+
+  contenedor.innerHTML = lista.slice(0, 50).map(a => {
+    const dif = parseNum(a.diferencia, 0);
+    let badgeColor = "bg-slate-800 text-slate-300 border-slate-700";
+    let signo = "0";
+
+    if (dif > 0) {
+      badgeColor = "bg-emerald-950/80 text-emerald-300 border-emerald-500/40";
+      signo = `+${dif}`;
+    } else if (dif < 0) {
+      badgeColor = "bg-rose-950/80 text-rose-300 border-rose-500/40";
+      signo = `${dif}`;
+    }
+
+    return `
+      <div class="p-3 bg-slate-950/80 border border-slate-800 rounded-2xl space-y-1.5 font-sans">
+        <div class="flex items-center justify-between text-xs">
+          <div class="flex items-center gap-1.5">
+            <span class="text-[9.5px] font-mono font-bold text-purple-400">${a.codigo || ''}</span>
+            <span class="text-xs font-bold text-white truncate max-w-[180px]">${a.nombre || a.codigo}</span>
+          </div>
+          <span class="px-2 py-0.5 rounded-lg border text-xs font-black font-mono ${badgeColor}">
+            ${signo} uds
+          </span>
+        </div>
+
+        <div class="flex items-center justify-between text-[10px] text-slate-400 font-mono border-t border-slate-900 pt-1.5">
+          <div>
+            <span>Antes: <strong class="text-slate-300">${a.stockAnterior !== undefined ? a.stockAnterior : 0}</strong></span>
+            <span class="mx-1">➔</span>
+            <span>Físico: <strong class="text-white">${a.stockFisico !== undefined ? a.stockFisico : 0}</strong></span>
+          </div>
+          <div class="text-right">
+            <span class="text-purple-300 font-semibold font-sans">Por: ${a.ajustadoPor || 'Carlos'}</span>
+            <span class="text-slate-500 font-sans">(${a.inventarioDe || 'General'})</span>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between text-[9.5px] text-slate-500 pt-0.5">
+          <span class="truncate max-w-[210px] italic">📝 ${a.motivo || 'Toma física'}</span>
+          <span class="font-mono">${a.fecha || ''}</span>
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  inicializarIconos();
+}
+
