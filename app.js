@@ -429,8 +429,9 @@ function calcularStockDetalladoPorCodigo() {
     } else if (invDe === "Carlos") {
       detalle[cod].Carlos += dif;
     } else {
-      // General / Consolidado: distribuir equitativamente o en total
-      detalle[cod].Carlos += dif;
+      // General / Consolidado: el ajuste no pertenece a un vendedor específico,
+      // solo afecta el total consolidado.
+      // No se suma a Carlos ni Daniel para no inflar su stock individual.
     }
     detalle[cod].total += dif;
   });
@@ -7514,14 +7515,26 @@ function eliminarLiquidacionComision(idLiq) {
 let filtroBusquedaAjustes = "";
 
 function renderizarModuloAjustes() {
+  const vendedor = state.vendedorActual || "Carlos";
+
+  // Auto-seleccionar inventario y responsable según el vendedor activo.
+  // Solo se cambia si el usuario no lo ha modificado manualmente
+  // (detectado cuando aún tiene el valor por defecto "Consolidado").
   const selectInv = document.getElementById("ajusteFiltroInventario");
-  const vistaStock = selectInv ? selectInv.value : "Consolidado";
+  if (selectInv && selectInv.value === "Consolidado" && vendedor !== "Consolidado") {
+    selectInv.value = vendedor; // "Carlos" o "Daniel"
+  }
+  const vistaStock = selectInv ? selectInv.value : vendedor;
   const stockMap = calcularStockPorCodigo(vistaStock);
 
   // Asegurar que el responsable inicial coincida con el usuario activo
   const respSelect = document.getElementById("ajusteResponsable");
   if (respSelect && !respSelect.value) {
-    respSelect.value = state.vendedorActual || "Carlos";
+    respSelect.value = vendedor;
+  }
+  // Forzar responsable = vendedor activo (no permitir que Daniel registre ajustes de Carlos)
+  if (respSelect) {
+    respSelect.value = vendedor;
   }
 
   // 1. Renderizar lista del catálogo con formulario de ajuste integrado en cada tarjeta
