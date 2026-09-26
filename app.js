@@ -53,6 +53,7 @@ let state = {
   anulaciones: [], // Historial informativo de ventas anuladas
   liquidaciones: [], // Historial de comisiones liquidadas a preventistas
   ajustes: [], // Historial de ajustes y toma física de inventario
+  vendedoresSatelite: [], // Lista de colaboradores satélite asignados a Carlos o Daniel
   productoSeleccionadoAjuste: null, // Producto activo para toma física
   filtroPreventaComision: "todos", // "todos" o nombre del preventista
   filtroCuentas: "",
@@ -296,6 +297,11 @@ function cargarEstadoLocal() {
     try { state.ajustes = JSON.parse(ajus); } catch(e) { state.ajustes = []; }
   }
 
+  const vends = localStorage.getItem("inv_vendedores_satelite_v2");
+  if (vends) {
+    try { state.vendedoresSatelite = JSON.parse(vends); } catch(e) { state.vendedoresSatelite = []; }
+  }
+
   const savedVista = localStorage.getItem("inv_vista_vendedor");
   if (savedVista) {
     state.vistaVendedor = savedVista;
@@ -326,6 +332,9 @@ function guardarLiquidacionesLocal() {
 }
 function guardarAjustesLocal() {
   localStorage.setItem("inv_ajustes_v2", JSON.stringify(state.ajustes || []));
+}
+function guardarVendedoresLocal() {
+  localStorage.setItem("inv_vendedores_satelite_v2", JSON.stringify(state.vendedoresSatelite || []));
 }
 function guardarFinanzasLocal() {
   localStorage.setItem("inv_finanzas_v2", JSON.stringify(state.movimientosDinero));
@@ -530,7 +539,7 @@ function calcularCostosPorCodigo(vista = state.vistaVendedor) {
 // NAVEGACIÓN Y VISTAS
 // ==========================================================================
 function cambiarVista(vista) {
-  const vistas = ["dashboard", "inventario", "ventas", "compras", "finanzas", "configuracion", "clientes", "cuentas", "comisiones", "ajustes"];
+  const vistas = ["dashboard", "inventario", "ventas", "compras", "finanzas", "configuracion", "clientes", "cuentas", "comisiones", "ajustes", "vendedores"];
   
   vistas.forEach(v => {
     const el = document.getElementById("view" + capitalizar(v));
@@ -561,6 +570,7 @@ function cambiarVista(vista) {
   if (vista === "cuentas") renderizarCuentas();
   if (vista === "comisiones") renderizarModuloComisiones();
   if (vista === "ajustes") renderizarModuloAjustes();
+  if (vista === "vendedores") renderizarModuloVendedores();
   if (vista === "configuracion") {
     cargarConfigPuntosUI();
     const surl = document.getElementById("sheetsApiUrl");
@@ -6315,6 +6325,12 @@ async function _descargarDatosSheets(mostrarMensaje = false) {
         guardarAjustesLocal();
       }
 
+      // 11. Vendedores Satélite: Reflejar hoja Vendedores de Sheets
+      if (json.data.vendedores !== undefined) {
+        state.vendedoresSatelite = Array.isArray(json.data.vendedores) ? json.data.vendedores : [];
+        guardarVendedoresLocal();
+      }
+
       renderizarTodo();
       actualizarBadgeConexion();
       if (mostrarMensaje) {
@@ -7884,3 +7900,237 @@ function renderizarHistorialAjustes() {
   inicializarIconos();
 }
 
+// ==========================================================================
+// MÓDULO DE VENDEDORES SATÉLITE (FRONTEND - ASIGNACIÓN A CARLOS / DANIEL)
+// ==========================================================================
+
+function renderizarModuloVendedores() {
+  const listaCont = document.getElementById("vendedoresLista");
+  const countEl = document.getElementById("vendedoresCount");
+  if (!listaCont) return;
+
+  const vends = state.vendedoresSatelite || [];
+  if (countEl) countEl.textContent = vends.length;
+
+  if (vends.length === 0) {
+    listaCont.innerHTML = `
+      <div class="text-center py-8 px-4 bg-slate-950/60 rounded-2xl border border-slate-800 space-y-2">
+        <i data-lucide="user-plus" class="w-8 h-8 mx-auto text-sky-400 stroke-1"></i>
+        <p class="text-xs font-bold text-slate-300">No hay vendedores satélite registrados.</p>
+        <p class="text-[11px] text-slate-500 max-w-xs mx-auto">Agrega colaboradores para que levanten pedidos y consulten exclusivamente el stock del socio asignado.</p>
+        <button onclick="abrirModalNuevoVendedor()" class="mt-2 px-3.5 py-2 bg-sky-500 hover:bg-sky-400 text-slate-950 font-black rounded-xl text-xs active:scale-95 transition-all inline-flex items-center gap-1.5">
+          <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+          <span>Registrar Primer Vendedor</span>
+        </button>
+      </div>
+    `;
+    inicializarIconos();
+    return;
+  }
+
+  listaCont.innerHTML = vends.map(v => {
+    const asignado = String(v.asignadoA || "Carlos").trim();
+    const esCarlos = asignado === "Carlos";
+    const badgeAsig = esCarlos
+      ? "bg-amber-950/80 text-amber-300 border-amber-500/40"
+      : "bg-indigo-950/80 text-indigo-300 border-indigo-500/40";
+    const esActivo = String(v.estado || "ACTIVO").toUpperCase() === "ACTIVO";
+
+    return `
+      <div class="bg-slate-950/90 border border-slate-800 hover:border-sky-500/40 rounded-2xl p-3.5 flex items-center justify-between gap-3 shadow-md transition-all font-sans">
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center gap-2 flex-wrap">
+            <h4 class="text-xs font-bold text-white truncate">${v.nombre}</h4>
+            <span class="px-2 py-0.5 rounded-lg border text-[10px] font-bold ${badgeAsig}">
+              📦 Asignado a: ${asignado}
+            </span>
+            <span class="text-[9.5px] px-1.5 py-0.2 rounded-md font-mono ${esActivo ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/30' : 'bg-rose-950 text-rose-300 border border-rose-500/30'}">
+              ${esActivo ? 'ACTIVO' : 'INACTIVO'}
+            </span>
+          </div>
+
+          <div class="flex items-center gap-3 mt-1 text-[11px] text-slate-400 font-mono">
+            ${v.telefono ? `<span>📞 ${v.telefono}</span>` : ''}
+            <span>💰 Comisión: <b>${v.porcentajeComision || 13}%</b></span>
+            ${v.fechaRegistro ? `<span class="hidden sm:inline text-slate-500">📅 ${v.fechaRegistro}</span>` : ''}
+          </div>
+        </div>
+
+        <div class="flex items-center gap-1.5 shrink-0">
+          <!-- Selector rápido de cambio de asignación directa -->
+          <div class="flex items-center bg-slate-900 border border-slate-700/80 rounded-xl p-0.5">
+            <button onclick="cambiarAsignacionRapida('${v.id}', 'Carlos')" 
+              class="px-2 py-1 text-[10px] font-bold rounded-lg transition-all ${esCarlos ? 'bg-amber-500 text-slate-950 font-black shadow' : 'text-slate-400 hover:text-white'}">
+              Carlos
+            </button>
+            <button onclick="cambiarAsignacionRapida('${v.id}', 'Daniel')" 
+              class="px-2 py-1 text-[10px] font-bold rounded-lg transition-all ${!esCarlos ? 'bg-indigo-600 text-white font-black shadow' : 'text-slate-400 hover:text-white'}">
+              Daniel
+            </button>
+          </div>
+
+          <button onclick="abrirModalEditarVendedor('${v.id}')" title="Editar" class="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 active:scale-95 transition-all">
+            <i data-lucide="edit-3" class="w-3.5 h-3.5"></i>
+          </button>
+          <button onclick="eliminarVendedorSateliteConfirmar('${v.id}')" title="Eliminar" class="p-2 rounded-xl bg-rose-950/60 hover:bg-rose-900 text-rose-300 border border-rose-500/30 active:scale-95 transition-all">
+            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+          </button>
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  inicializarIconos();
+}
+
+function abrirModalNuevoVendedor() {
+  const modal = document.getElementById("modalVendedorSatelite");
+  const titulo = document.getElementById("modalVendedorTitulo");
+  if (titulo) titulo.textContent = "Nuevo Vendedor Satélite";
+  
+  const idEl = document.getElementById("vendedorModalId");
+  const nomEl = document.getElementById("vendedorModalNombre");
+  const asigEl = document.getElementById("vendedorModalAsignadoA");
+  const telEl = document.getElementById("vendedorModalTelefono");
+  const comEl = document.getElementById("vendedorModalComision");
+  const estEl = document.getElementById("vendedorModalEstado");
+
+  if (idEl) idEl.value = "";
+  if (nomEl) nomEl.value = "";
+  if (asigEl) asigEl.value = state.vendedorActual || "Carlos";
+  if (telEl) telEl.value = "";
+  if (comEl) comEl.value = "13";
+  if (estEl) estEl.value = "ACTIVO";
+
+  if (modal) {
+    modal.classList.remove("hidden");
+    modal.classList.add("flex");
+  }
+  inicializarIconos();
+  setTimeout(() => nomEl && nomEl.focus(), 100);
+}
+
+function abrirModalEditarVendedor(id) {
+  const v = (state.vendedoresSatelite || []).find(item => item.id === id);
+  if (!v) return;
+
+  const modal = document.getElementById("modalVendedorSatelite");
+  const titulo = document.getElementById("modalVendedorTitulo");
+  if (titulo) titulo.textContent = `Editar: ${v.nombre}`;
+
+  const idEl = document.getElementById("vendedorModalId");
+  const nomEl = document.getElementById("vendedorModalNombre");
+  const asigEl = document.getElementById("vendedorModalAsignadoA");
+  const telEl = document.getElementById("vendedorModalTelefono");
+  const comEl = document.getElementById("vendedorModalComision");
+  const estEl = document.getElementById("vendedorModalEstado");
+
+  if (idEl) idEl.value = v.id || "";
+  if (nomEl) nomEl.value = v.nombre || "";
+  if (asigEl) asigEl.value = v.asignadoA || "Carlos";
+  if (telEl) telEl.value = v.telefono || "";
+  if (comEl) comEl.value = v.porcentajeComision !== undefined ? v.porcentajeComision : "13";
+  if (estEl) estEl.value = v.estado || "ACTIVO";
+
+  if (modal) {
+    modal.classList.remove("hidden");
+    modal.classList.add("flex");
+  }
+  inicializarIconos();
+}
+
+function cerrarModalVendedorSatelite() {
+  const modal = document.getElementById("modalVendedorSatelite");
+  if (modal) {
+    modal.classList.add("hidden");
+    modal.classList.remove("flex");
+  }
+}
+
+function guardarVendedorSateliteForm(e) {
+  if (e && e.preventDefault) e.preventDefault();
+
+  const idEl = document.getElementById("vendedorModalId");
+  const nomEl = document.getElementById("vendedorModalNombre");
+  const asigEl = document.getElementById("vendedorModalAsignadoA");
+  const telEl = document.getElementById("vendedorModalTelefono");
+  const comEl = document.getElementById("vendedorModalComision");
+  const estEl = document.getElementById("vendedorModalEstado");
+
+  const nombre = (nomEl ? nomEl.value : "").trim();
+  if (!nombre) {
+    mostrarToast("El nombre del vendedor es obligatorio.", "error");
+    return;
+  }
+
+  const id = (idEl && idEl.value) ? idEl.value : ("VEND-" + Date.now().toString().slice(-6));
+  const asignadoA = asigEl ? asigEl.value : "Carlos";
+  const telefono = telEl ? telEl.value.trim() : "";
+  const comision = parseNum(comEl ? comEl.value : 13, 13);
+  const estado = estEl ? estEl.value : "ACTIVO";
+
+  const vendedorObj = {
+    id: id,
+    nombre: nombre,
+    asignadoA: asignadoA,
+    telefono: telefono,
+    porcentajeComision: comision,
+    estado: estado,
+    fechaRegistro: new Date().toLocaleString()
+  };
+
+  if (!state.vendedoresSatelite) state.vendedoresSatelite = [];
+  const idx = state.vendedoresSatelite.findIndex(v => v.id === id);
+  if (idx !== -1) {
+    state.vendedoresSatelite[idx] = { ...state.vendedoresSatelite[idx], ...vendedorObj };
+  } else {
+    state.vendedoresSatelite.push(vendedorObj);
+  }
+
+  guardarVendedoresLocal();
+  encolarAccionSincronizacion("guardarVendedor", { vendedor: vendedorObj });
+
+  cerrarModalVendedorSatelite();
+  renderizarModuloVendedores();
+  mostrarToast(`Vendedor ${nombre} asignado a ${asignadoA} 👤`, "success");
+
+  if (state.config.sheetsUrl && navigator.onLine) {
+    procesarColaSincronizacion(false);
+  }
+}
+
+function cambiarAsignacionRapida(id, nuevoAsignado) {
+  const v = (state.vendedoresSatelite || []).find(item => item.id === id);
+  if (!v) return;
+
+  if (v.asignadoA === nuevoAsignado) return;
+
+  v.asignadoA = nuevoAsignado;
+  guardarVendedoresLocal();
+  encolarAccionSincronizacion("guardarVendedor", { vendedor: v });
+
+  renderizarModuloVendedores();
+  mostrarToast(`Vendedor ${v.nombre} ahora asignado a ${nuevoAsignado} 📦`, "success");
+
+  if (state.config.sheetsUrl && navigator.onLine) {
+    procesarColaSincronizacion(false);
+  }
+}
+
+function eliminarVendedorSateliteConfirmar(id) {
+  const v = (state.vendedoresSatelite || []).find(item => item.id === id);
+  if (!v) return;
+
+  if (!confirm(`¿Eliminar al vendedor "${v.nombre}" del sistema y de Google Sheets?`)) return;
+
+  state.vendedoresSatelite = state.vendedoresSatelite.filter(item => item.id !== id);
+  guardarVendedoresLocal();
+  encolarAccionSincronizacion("eliminarVendedor", { id: id, idVendedor: id });
+
+  renderizarModuloVendedores();
+  mostrarToast(`Vendedor eliminado con éxito`, "info");
+
+  if (state.config.sheetsUrl && navigator.onLine) {
+    procesarColaSincronizacion(false);
+  }
+}
