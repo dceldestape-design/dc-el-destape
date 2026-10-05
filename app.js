@@ -1966,27 +1966,123 @@ function actualizarBotonContactos() {
 async function seleccionarContactoTelefono() {
   const nombreInput = document.getElementById("modalClienteNombre");
   const telInput = document.getElementById("modalClienteTelefono");
-  if (!contactosDisponibles()) {
-    mostrarToast("En este navegador no se puede abrir la agenda. Usa Chrome en Android con la app instalada (HTTPS) o digita el número manual.", "info");
-    return;
-  }
-  try {
-    const lista = await navigator.contacts.select(["name", "tel"], { multiple: false });
-    if (!lista || lista.length === 0) return;
-    const c = lista[0] || {};
-    const nombre = String((c.name && c.name[0]) || "").trim();
-    const tels = Array.isArray(c.tel) ? c.tel : [];
-    const tel = String(tels[0] || "").replace(/[^\d+]/g, "").trim();
-    if (nombreInput && nombre && !String(nombreInput.value || "").trim()) nombreInput.value = nombre;
-    if (telInput && tel) {
-      telInput.value = tel;
-      telInput.focus();
+  // 1. Nativo en Chrome/Edge Android (HTTPS o localhost)
+  if (contactosDisponibles()) {
+    try {
+      const lista = await navigator.contacts.select(["name", "tel"], { multiple: false });
+      if (!lista || lista.length === 0) return;
+      const c = lista[0] || {};
+      rellenarClienteDesdeContacto(
+        String((c.name && c.name[0]) || "").trim(),
+        String((Array.isArray(c.tel) ? c.tel[0] : "") || "").replace(/[^\d+]/g, "").trim()
+      );
+      return;
+    } catch (e) {
+      if (e && e.name === "NotAllowedError") mostrarToast("Permiso de contactos denegado.", "error");
+      else if (!(e && e.name === "AbortError")) mostrarToast("No se pudo leer contactos.", "error");
+      return;
     }
-    if (!tel) mostrarToast("El contacto no tiene teléfono.", "error");
-  } catch (e) {
-    if (e && e.name === "NotAllowedError") mostrarToast("Permiso de contactos denegado.", "error");
-    else if (!(e && e.name === "AbortError")) mostrarToast("No se pudo leer contactos.", "error");
   }
+  // 2. Fallback PC/escritorio: elegir desde archivo vCard (.vcf exportado de Google Contactos)
+  const inp = document.getElementById("inputVcardContactos");
+  if (inp) {
+    mostrarToast("En PC elige tu archivo de contactos .vcf (se exporta gratis desde contacts.google.com).", "info");
+    inp.click();
+  } else {
+    mostrarToast("En este navegador no se puede abrir la agenda. Usa Chrome en Android con la app instalada (HTTPS) o digita el número manual.", "info");
+  }
+}
+
+function rellenarClienteDesdeContacto(nombre, tel) {
+  const nombreInput = document.getElementById("modalClienteNombre");
+  const telInput = document.getElementById("modalClienteTelefono");
+  if (nombreInput && nombre && !String(nombreInput.value || "").trim()) nombreInput.value = nombre;
+  if (telInput && tel) {
+    telInput.value = tel;
+    telInput.focus();
+  }
+  if (!tel) mostrarToast("El contacto no tiene teléfono.", "error");
+}
+
+// --- Importar agenda desde vCard (.vcf) para PC ---
+let _contactosVcard = [];
+
+function parseVcards(texto) {
+  const contactos = [];
+  const bloques = String(texto || "").split(/BEGIN:VCARD/i);
+  for (const b of bloques) {
+    if (!b || !b.trim()) continue;
+    const lineas = b.replace(/\r\n/g, "\n").replace(/\r/g, "\n").replace(/\n[ \t]/g, "").split("\n");
+    let nombre = "";
+    const tels = [];
+    for (const ln of lineas) {
+      const mFn = ln.match(/^FN[^:]*:(.*)$/i);
+      if (mFn && !nombre) nombre = mFn[1].trim();
+      const mTel = ln.match(/^TEL[^:]*:(.*)$/i);
+      if (mTel) {
+        const num = mTel[1].trim();
+        if (!num) continue;
+        const pref = /cell|mobile|iphone/i.test(ln) ? 0 : (/voice|pref/i.test(ln) ? 1 : 2);
+        tels.push({ num, pref });
+      }
+    }
+    if (!nombre) {
+      const mN = b.match(/^N[^:]*:(.*)$/im);
+      if (mN) {
+        const p = mN[1].split(";");
+        nombre = [(p[1] || ""), (p[0] || "")].join(" ").trim();
+      }
+    }
+    tels.sort((a, z) => a.pref - z.pref);
+    if (nombre || tels.length > 0) {
+      contactos.push({ nombre: nombre || "(Sin nombre)", tel: tels.length > 0 ? tels[0].num : "" });
+    }
+  }
+  return contactos;
+}
+
+function importarContactosVcard(input) {
+  const f = input && input.files && input.files[0];
+  if (!f) return;
+  const lector = new FileReader();
+  lector.onload = () => {
+    try {
+      _contactosVcard = parseVcards(lector.result);
+    } catch (e) {
+      _contactosVcard = [];
+    }
+    input.value = "";
+    const sel = document.getElementById("selectContactoVcard");
+    if (!_contactosVcard.length) {
+      mostrarToast("No se encontraron contactos en ese archivo.", "error");
+      if (sel) sel.classList.add("hidden");
+      return;
+    }
+    if (_contactosVcard.length === 1) {
+      if (sel) sel.classList.add("hidden");
+      rellenarClienteDesdeContacto(_contactosVcard[0].nombre, _contactosVcard[0].tel);
+      mostrarToast("Contacto importado ✅", "success");
+      return;
+    }
+    if (sel) {
+      sel.innerHTML = '<option value="">-- Elige un contacto (' + _contactosVcard.length + ') --</option>' +
+        _contactosVcard.map((c, i) => `<option value="${i}">${String(c.nombre).slice(0, 40)}${c.tel ? " • " + String(c.tel).slice(0, 20) : ""}</option>`).join("");
+      sel.classList.remove("hidden");
+      mostrarToast("Selecciona el contacto de la lista 👇", "info");
+    }
+  };
+  lector.onerror = () => {
+    mostrarToast("No se pudo leer el archivo.", "error");
+    input.value = "";
+  };
+  lector.readAsText(f);
+}
+
+function elegirContactoVcard(idx) {
+  if (idx === "" || idx === null || idx === undefined) return;
+  const c = _contactosVcard[Number(idx)];
+  if (!c) return;
+  rellenarClienteDesdeContacto(c.nombre === "(Sin nombre)" ? "" : c.nombre, c.tel);
 }
 
 function guardarClienteForm() {

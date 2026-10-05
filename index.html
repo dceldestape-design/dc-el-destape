@@ -1835,6 +1835,9 @@
             class="mt-2 w-full py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-indigo-300 font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center justify-center gap-2">
             📇 Buscar en mis contactos
           </button>
+          <input type="file" id="inputVcardContactos" accept=".vcf,.vcard,text/vcard" class="hidden" onchange="importarContactosVcard(this)">
+          <select id="selectContactoVcard" onchange="elegirContactoVcard(this.value)"
+            class="hidden mt-2 w-full px-3 py-2.5 bg-slate-800 border border-indigo-500/50 rounded-xl text-sm text-white focus:outline-none"></select>
         </div>
         <div>
           <label class="text-xs font-semibold text-slate-300 mb-1 block">Puntos acumulados</label>
@@ -2650,6 +2653,6 @@
   </div>
 
   <!-- Application Logic -->
-  <script src="app.js?v=20260925_02"></script>
+  <script src="app.js?v=20261005_01"></script>
 </body>
 </html>
