@@ -5967,13 +5967,23 @@ async function procesarColaSincronizacion(mostrarFeedback = false) {
 
       try {
         await enviarPeticionSheets(item.accion, item.datos);
-        // Si no arrojó excepción de red, se procesó
+        // Sin excepción = éxito
         state.colaSincronizacion.shift();
         guardarColaLocal();
         actualizarIndicadorOffline();
       } catch (err) {
-        console.warn("Fallo temporal de red al procesar item de sincronización:", item, err);
-        break; // Detener bucle y mantener los ítems restantes en cola
+        const esErrorNegocio = err.message && err.message.startsWith("GAS Error:");
+        if (esErrorNegocio) {
+          // Error de lógica de negocio (ej: producto no existe): sacar de cola para no bloquear
+          console.error("[SYNC] Error de negocio, descartando ítem de cola:", item, err.message);
+          state.colaSincronizacion.shift();
+          guardarColaLocal();
+          actualizarIndicadorOffline();
+        } else {
+          // Error de red real: mantener en cola y detener
+          console.warn("Fallo temporal de red al procesar item de sincronización:", item, err);
+          break; // Detener bucle y mantener los ítems restantes en cola
+        }
       }
     }
 
@@ -6067,12 +6077,29 @@ async function enviarPeticionSheets(accion, datos = {}) {
   try {
     const res = await fetch(state.config.sheetsUrl, {
       method: "POST",
-      mode: "no-cors",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify(payload),
       signal: controller.signal
     });
     clearTimeout(timeoutId);
+
+    // Intentar leer la respuesta para detectar errores del GAS
+    if (!res.ok) {
+      const t = await res.text().catch(() => "");
+      console.error("[SYNC ERROR] HTTP", res.status, "para acción:", accion, t.slice(0, 200));
+      mostrarToast(`⚠️ Error HTTP ${res.status} en sincronización (${accion})`, "error");
+      throw new Error("HTTP " + res.status);
+    }
+    const text = await res.text();
+    let json = null;
+    try { json = JSON.parse(text); } catch (parseErr) { /* respuesta no-JSON: asumir éxito de red */ }
+    if (json && json.success === false && json.error) {
+      // El GAS reportó un error de negocio — lanzar para que la cola lo maneje
+      console.error("[SYNC ERROR] GAS reportó error para acción:", accion, "—", json.error);
+      mostrarToast(`⚠️ Error en sincronización (${accion}): ${json.error.slice(0, 120)}`, "error");
+      throw new Error("GAS Error: " + json.error);
+    }
+
     return res;
   } catch (err) {
     clearTimeout(timeoutId);
@@ -6238,11 +6265,25 @@ async function _descargarDatosSheets(mostrarMensaje = false) {
         }).filter(p => p && p.id);
 
         const idsPedidosSheets = new Set(pedidosSheets.map(p => p.id));
+        // Preservar intenciones offline en cola: nuevos pedidos + marcados comprado/eliminados
+        const idsCompradoEnCola = new Set(
+          (state.colaSincronizacion || [])
+            .filter(q => q.accion === "marcarPedidoComprado" && q.datos && q.datos.id)
+            .map(q => String(q.datos.id))
+        );
+        const idsEliminadosEnCola = new Set(
+          (state.colaSincronizacion || [])
+            .filter(q => q.accion === "eliminarPedido" && q.datos && q.datos.id)
+            .map(q => String(q.datos.id))
+        );
+        const pedidosBase = pedidosSheets
+          .filter(p => !idsEliminadosEnCola.has(String(p.id)))
+          .map(p => (idsCompradoEnCola.has(String(p.id)) && p.estado !== "comprado") ? { ...p, estado: "comprado" } : p);
         const pedidosSoloLocales = (state.pedidos || []).filter(p =>
           p && p.id && !idsPedidosSheets.has(p.id) &&
           (state.colaSincronizacion || []).some(q => q.datos && q.datos.pedido && q.datos.pedido.id === p.id)
         );
-        state.pedidos = [...pedidosSheets, ...pedidosSoloLocales];
+        state.pedidos = [...pedidosBase, ...pedidosSoloLocales];
         guardarPedidosLocal();
       }
 
@@ -7435,11 +7476,11 @@ async function guardarLiquidacionModal(e) {
     };
     state.movimientosDinero.unshift(movObj);
     guardarFinanzasLocal();
-    encolarSincronizacion("registrarMovimiento", { movimiento: movObj });
+    encolarAccionSincronizacion("registrarMovimiento", { movimiento: movObj });
   }
 
   // Encolar y sincronizar liquidación en Google Sheets
-  encolarSincronizacion("registrarLiquidacion", { liquidacion: liqObj });
+  encolarAccionSincronizacion("registrarLiquidacion", { liquidacion: liqObj });
 
   cerrarModalLiquidacion();
   renderizarModuloComisiones();
@@ -7515,7 +7556,7 @@ function eliminarLiquidacionComision(idLiq) {
   state.liquidaciones = (state.liquidaciones || []).filter(l => l.id !== idLiq);
   guardarLiquidacionesLocal();
 
-  encolarSincronizacion("eliminarLiquidacion", { id: idLiq });
+  encolarAccionSincronizacion("eliminarLiquidacion", { id: idLiq });
   renderizarModuloComisiones();
   mostrarToast(`Liquidación ${idLiq} eliminada.`, "info");
 
