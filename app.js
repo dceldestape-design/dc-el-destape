@@ -1925,6 +1925,7 @@ function abrirModalNuevoCliente(prefillNombre = "") {
     document.getElementById("modalClienteNombre")?.focus();
   }, 100);
 
+  actualizarBotonContactos();
   inicializarIconos();
 }
 
@@ -1941,7 +1942,51 @@ function abrirModalEditarCliente(id) {
 
   const modal = document.getElementById("modalCliente");
   if (modal) { modal.classList.remove("hidden"); modal.classList.add("flex"); }
+  actualizarBotonContactos();
   inicializarIconos();
+}
+
+// Selector de contactos del dispositivo (Contact Picker API: Chrome Android, HTTPS/localhost).
+// Si no está disponible, el botón se oculta y se sigue digitando manual.
+function contactosDisponibles() {
+  try {
+    return ("contacts" in navigator) && ("ContactsManager" in window);
+  } catch (e) { return false; }
+}
+
+function actualizarBotonContactos() {
+  // El botón siempre visible: si el navegador no soporta Contact Picker,
+  // al pulsarlo se explica cómo hacerlo (Chrome Android + HTTPS).
+  const b = document.getElementById("btnContactoCliente");
+  if (!b) return;
+  b.classList.remove("hidden");
+  b.classList.add("flex");
+}
+
+async function seleccionarContactoTelefono() {
+  const nombreInput = document.getElementById("modalClienteNombre");
+  const telInput = document.getElementById("modalClienteTelefono");
+  if (!contactosDisponibles()) {
+    mostrarToast("En este navegador no se puede abrir la agenda. Usa Chrome en Android con la app instalada (HTTPS) o digita el número manual.", "info");
+    return;
+  }
+  try {
+    const lista = await navigator.contacts.select(["name", "tel"], { multiple: false });
+    if (!lista || lista.length === 0) return;
+    const c = lista[0] || {};
+    const nombre = String((c.name && c.name[0]) || "").trim();
+    const tels = Array.isArray(c.tel) ? c.tel : [];
+    const tel = String(tels[0] || "").replace(/[^\d+]/g, "").trim();
+    if (nombreInput && nombre && !String(nombreInput.value || "").trim()) nombreInput.value = nombre;
+    if (telInput && tel) {
+      telInput.value = tel;
+      telInput.focus();
+    }
+    if (!tel) mostrarToast("El contacto no tiene teléfono.", "error");
+  } catch (e) {
+    if (e && e.name === "NotAllowedError") mostrarToast("Permiso de contactos denegado.", "error");
+    else if (!(e && e.name === "AbortError")) mostrarToast("No se pudo leer contactos.", "error");
+  }
 }
 
 function guardarClienteForm() {
