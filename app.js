@@ -62,7 +62,7 @@ let state = {
   modoPOS: "venta", // "venta" | "pedido"
   config: {
     sheetsUrl: "",
-    tipoCambio: 520,
+    tipoCambio: 500,
     nombreNegocio: "DC El Destape",
     telefonoNegocio: "+506 8992-7936",
     // Configuración del sistema de puntos de fidelización (Predefinidos)
@@ -465,7 +465,7 @@ function calcularStockPorCodigo(vista = state.vistaVendedor) {
 
 function calcularCostosPorCodigo(vista = state.vistaVendedor) {
   const acc = {};
-  const tcConfig = parseNum(state.config.tipoCambio, 520) || 520;
+  const tcConfig = parseNum(state.config.tipoCambio, 500) || 500;
 
   state.compras.forEach(p => {
     const vend = String(p.vendedor || "Carlos").trim();
@@ -489,7 +489,7 @@ function calcularCostosPorCodigo(vista = state.vistaVendedor) {
       const cant = parseNum(item.cantidad, 0);
       if (cant <= 0) return;
 
-      const tc = parseNum(item.tipoCambio || p.tipoCambio || tcConfig, 520) || 520;
+      const tc = parseNum(item.tipoCambio || p.tipoCambio || tcConfig, 500) || 500;
       let cuUSD = parseNum(item.costoUnitarioUSD, 0);
       let cuCRC = parseNum(item.costoUnitarioCRC, 0);
 
@@ -642,13 +642,13 @@ function aplicarConfiguracionUI() {
   if (inputName) inputName.value = state.config.nombreNegocio || "Libro de Inventario";
 
   const inputTC = document.getElementById("exchangeRateInput");
-  if (inputTC) inputTC.value = state.config.tipoCambio || 520;
+  if (inputTC) inputTC.value = state.config.tipoCambio || 500;
 
   const inputPhone = document.getElementById("businessPhoneInput");
   if (inputPhone) inputPhone.value = state.config.telefonoNegocio || "";
 
   const inputCompraTC = document.getElementById("compraTipoCambio");
-  if (inputCompraTC) inputCompraTC.value = state.config.tipoCambio || 520;
+  if (inputCompraTC) inputCompraTC.value = state.config.tipoCambio || 500;
 
   const inputCompraFecha = document.getElementById("compraFecha");
   if (inputCompraFecha && !inputCompraFecha.value) inputCompraFecha.value = todayStr();
@@ -663,7 +663,7 @@ function renderizarDashboard() {
   const vista = state.vistaVendedor || "Consolidado";
   const stockMap = calcularStockPorCodigo(vista);
   const costMap = calcularCostosPorCodigo(vista);
-  const tc = parseNum(state.config.tipoCambio, 520) || 520;
+  const tc = parseNum(state.config.tipoCambio, 500) || 500;
 
   // Actualizar subtítulo en el banner si existe
   const bannerSub = document.getElementById("dashBannerSubtitle");
@@ -2253,7 +2253,7 @@ function obtenerDatosEnvioCuenta(cta) {
     tieneEnvio: false 
   };
 
-  const tc = Number(state.config.tipoCambio || 520);
+  const tc = Number(state.config.tipoCambio || 500);
   let costoEnvioCRC = parseNum(cta.costoEnvioCRC, 0);
 
   // Si no está explícito en la cuenta, buscar la venta asociada en state.ventas
@@ -2343,7 +2343,7 @@ function editarEnvioCuenta(idCuenta) {
     return;
   }
 
-  const tc = Number(state.config.tipoCambio || 520);
+  const tc = Number(state.config.tipoCambio || 500);
   cta.costoEnvioCRC = nuevoEnvio;
   cta.costoEnvioUSD = tc > 0 ? (nuevoEnvio / tc) : 0;
 
@@ -2402,7 +2402,7 @@ function renderizarCuentas() {
   if (elCobrarCRC) elCobrarCRC.textContent = fmtCRC(totCobrarBrutoClienteCRC);
   if (elCobrarUSD) {
     if (totalEnvioEnCxcCRC > 0) {
-      elCobrarUSD.innerHTML = `<span>${fmtUSD(totCobrarBrutoClienteCRC / (Number(state.config.tipoCambio) || 520))}</span><span class="block text-[9px] text-slate-400 font-normal">Neto sin envíos: <b class="text-emerald-300">${fmtCRC(totCobrarNetoCRC)}</b> (Envío: -${fmtCRC(totalEnvioEnCxcCRC)})</span>`;
+      elCobrarUSD.innerHTML = `<span>${fmtUSD(totCobrarBrutoClienteCRC / (Number(state.config.tipoCambio) || 500))}</span><span class="block text-[9px] text-slate-400 font-normal">Neto sin envíos: <b class="text-emerald-300">${fmtCRC(totCobrarNetoCRC)}</b> (Envío: -${fmtCRC(totalEnvioEnCxcCRC)})</span>`;
     } else {
       elCobrarUSD.textContent = fmtUSD(totCobrarNetoUSD);
     }
@@ -2683,7 +2683,7 @@ function llenarAbonoTotal() {
 
   const datosEnv = obtenerDatosEnvioCuenta(cta);
   const saldoCRC = datosEnv.valorClienteCRC;
-  const tc = Number(state.config.tipoCambio || 520);
+  const tc = Number(state.config.tipoCambio || 500);
   const saldoUSD = parseFloat((saldoCRC / tc).toFixed(2));
 
   document.getElementById("abonoMontoCRC").value = saldoCRC;
@@ -2691,7 +2691,7 @@ function llenarAbonoTotal() {
 }
 
 function autoConvertirAbono(fuente) {
-  const tc = Number(state.config.tipoCambio || 520);
+  const tc = Number(state.config.tipoCambio || 500);
   const inCRC = document.getElementById("abonoMontoCRC");
   const inUSD = document.getElementById("abonoMontoUSD");
 
@@ -2863,7 +2863,7 @@ function cerrarModalNuevaCuenta() {
 }
 
 function autoConvertirNuevaCta(fuente) {
-  const tc = Number(state.config.tipoCambio || 520);
+  const tc = Number(state.config.tipoCambio || 500);
   const inCRC = document.getElementById("nuevaCtaMontoCRC");
   const inUSD = document.getElementById("nuevaCtaMontoUSD");
 
@@ -2964,7 +2964,7 @@ function actualizarPreviewPrecioUSD() {
   const equivEl = document.getElementById("editPrecioEquivUSD");
   if (!inputEl || !equivEl) return;
   const crc = parseNum(inputEl.value, 0);
-  const tc = Number(state.config.tipoCambio) || 520;
+  const tc = Number(state.config.tipoCambio) || 500;
   const usd = tc > 0 ? (crc / tc) : 0;
   equivEl.textContent = crc > 0 ? `≈ ${fmtUSD(usd)} USD` : "";
 }
@@ -3012,7 +3012,7 @@ function aplicarNuevoPrecioCarrito() {
 
   const item = state.carrito.find(i => String(i.codigo).trim().toUpperCase() === codNorm);
   if (item) {
-    const tc = Number(state.config.tipoCambio) || 520;
+    const tc = Number(state.config.tipoCambio) || 500;
     item.precioVentaCRC = nuevoPrecio;
     item.precioCRC = nuevoPrecio;
     item.precioVentaUSD = parseFloat((nuevoPrecio / tc).toFixed(2));
@@ -3344,7 +3344,7 @@ function editarProducto(codigo) {
 // Precio Recomendado = Precio Costo + (Precio Costo / 100 * Margen%)
 // --------------------------------------------------------------------------
 function calcularMargenYPrecioRecomendado(origen = 'costoUSD', autoAplicarVenta = true) {
-  const tc = Number(state.config.tipoCambio) || 520;
+  const tc = Number(state.config.tipoCambio) || 500;
   const costoUSD = parseFloat(document.getElementById("prodCostoRefUSD").value) || 0;
   const margenPct = parseFloat(document.getElementById("prodMargenPorcentaje").value) || 0;
 
@@ -3376,14 +3376,14 @@ function aplicarPrecioRecomendado() {
     mostrarToast("Ingresa primero el precio de costo en USD.", "info");
     return;
   }
-  const tc = Number(state.config.tipoCambio) || 520;
+  const tc = Number(state.config.tipoCambio) || 500;
   document.getElementById("prodPrecioVentaUSD").value = recUSD.toFixed(2);
   document.getElementById("prodPrecioVentaCRC").value = Math.round(recUSD * tc);
   mostrarToast("Precio recomendado aplicado a la venta 💵", "success");
 }
 
 function autoConvertirPrecio(origen) {
-  const tc = Number(state.config.tipoCambio) || 520;
+  const tc = Number(state.config.tipoCambio) || 500;
   if (origen === 'USD') {
     const usd = Number(document.getElementById("prodPrecioVentaUSD").value) || 0;
     document.getElementById("prodPrecioVentaCRC").value = usd > 0 ? Math.round(usd * tc) : "";
@@ -3526,7 +3526,7 @@ function seleccionarProductoCompraPorCodigo(codigo) {
   const prod = state.productos[codigo];
   if (!prod) return;
 
-  const tc = Number(document.getElementById("compraTipoCambio").value) || Number(state.config.tipoCambio) || 520;
+  const tc = Number(document.getElementById("compraTipoCambio").value) || Number(state.config.tipoCambio) || 500;
 
   // Llenar campos del editor rápido de item
   document.getElementById("compraItemEditorCodigo").value = codigo;
@@ -3562,7 +3562,7 @@ function cancelarItemCompra() {
 }
 
 function autoConvertirItemCompraCosto(origen) {
-  const tc = Number(document.getElementById("compraTipoCambio").value) || Number(state.config.tipoCambio) || 520;
+  const tc = Number(document.getElementById("compraTipoCambio").value) || Number(state.config.tipoCambio) || 500;
   const elUSD = document.getElementById("compraItemEditorCostoUSD");
   const elCRC = document.getElementById("compraItemEditorCostoCRC");
   if (origen === 'USD' && elUSD && elCRC) {
@@ -3702,7 +3702,7 @@ function renderizarListaCompraActual() {
   }
 
   // Sumar Costo de Envío de la Compra si se especificó
-  const tc = Number(document.getElementById("compraTipoCambio")?.value) || Number(state.config.tipoCambio) || 520;
+  const tc = Number(document.getElementById("compraTipoCambio")?.value) || Number(state.config.tipoCambio) || 500;
   const envioCRC = Number(document.getElementById("compraEnvioCRC")?.value) || 0;
   const envioUSD = tc > 0 ? (envioCRC / tc) : 0;
 
@@ -3739,7 +3739,7 @@ async function guardarCompra() {
   const fecha = document.getElementById("compraFecha").value || todayStr();
   const vendedor = (document.getElementById("compraVendedor") ? document.getElementById("compraVendedor").value : state.vendedorActual) || "Carlos";
   const pagadoPor = (document.getElementById("compraFinanciadoPor") ? document.getElementById("compraFinanciadoPor").value : vendedor) || "Carlos";
-  const tc = Number(document.getElementById("compraTipoCambio").value) || Number(state.config.tipoCambio) || 520;
+  const tc = Number(document.getElementById("compraTipoCambio").value) || Number(state.config.tipoCambio) || 500;
   const proveedor = document.getElementById("compraProveedor").value.trim();
   const notas = document.getElementById("compraNotas").value.trim();
   const envioCRC = Number(document.getElementById("compraEnvioCRC")?.value) || 0;
@@ -3915,7 +3915,7 @@ function pasarCompraACuentasPorPagar(idCompra) {
 
   const cant = Number(c.cantidad || 0);
   const cUSD = Number(c.costoUnitarioUSD || 0);
-  const tc = Number(c.tipoCambio || state.config.tipoCambio || 520);
+  const tc = Number(c.tipoCambio || state.config.tipoCambio || 500);
   const cCRC = Number(c.costoUnitarioCRC || (cUSD * tc));
   const totUSD = Number(c.totalUSD || (cant * cUSD));
   const totCRC = Number(c.totalCRC || (cant * cCRC));
@@ -3991,7 +3991,7 @@ function pasarVentaIndividualACuentasPorCobrar(idxVenta) {
   }
 
   const envioVentaCRC = parseNum(v.costoEnvioCRC, 0);
-  const tc = Number(state.config.tipoCambio || 520);
+  const tc = Number(state.config.tipoCambio || 500);
   const envioVentaUSD = parseNum(v.costoEnvioUSD, 0) || (tc > 0 ? envioVentaCRC / tc : 0);
 
   const cuentaObj = {
@@ -4048,7 +4048,7 @@ function renderizarHistorialCompras() {
     const nombre = prod ? prod.nombre : (c.nombre || c.codigo);
     const cant = Number(c.cantidad || 0);
     const cUSD = Number(c.costoUnitarioUSD || 0);
-    const tc = Number(c.tipoCambio || state.config.tipoCambio || 520);
+    const tc = Number(c.tipoCambio || state.config.tipoCambio || 500);
     const cCRC = Number(c.costoUnitarioCRC || (cUSD * tc));
     const totUSD = Number(c.totalUSD || (cant * cUSD));
     const totCRC = Number(c.totalCRC || (cant * cCRC));
@@ -4426,7 +4426,7 @@ function renderizarCarrito() {
 
   const descuento = state.descuentoPuntosAplicado || 0;
   const totalFinalCRC = Math.max(0, totalBrutoCRC - descuento);
-  const tc = state.config.tipoCambio || 520;
+  const tc = state.config.tipoCambio || 500;
   const totalFinalUSD = totalFinalCRC / tc;
 
   if (countEl) countEl.textContent = totalItems;
@@ -4620,10 +4620,13 @@ async function completarVenta() {
 
   // Costo de Envío de la venta (gasto de entrega que resta del ingreso a la empresa)
   const envioVentaCRC = Number(document.getElementById("posEnvioCRC")?.value) || 0;
-  const tcActual = Number(state.config.tipoCambio) || 520;
+  const tcActual = Number(state.config.tipoCambio) || 500;
   const envioVentaUSD = tcActual > 0 ? (envioVentaCRC / tcActual) : 0;
 
   const idVenta = "VTA-" + Date.now().toString().slice(-6);
+
+  // --- Puntos previos del cliente (antes de acreditar esta compra) ---
+  const puntosPrevios = cli ? (Number(state.clientes[cli.id]?.puntos) || 0) : 0;
 
   const ventaObj = {
     id: idVenta,
@@ -4667,6 +4670,7 @@ async function completarVenta() {
     descuentoPuntos,
     puntosGanados,
     puntosCanjados,
+    puntosPrevios,
     // --- Trazabilidad de pedidos preventa ---
     facturadoPor: vendedor,                                           // Quien facturó (Carlos/Daniel)
     pedidoOrigenId: state.pedidoEnFacturacion || localStorage.getItem("inv_pedido_en_facturacion") || "", // ID del pedido original
@@ -4861,10 +4865,18 @@ function abrirModalRecibo(venta, esPedido = false) {
   const puntosRow = document.getElementById("reciboPuntosRow");
   const puntosGanadosEl = document.getElementById("reciboPuntosGanados");
   if (puntosRow && puntosGanadosEl) {
-    if (!esPedido && venta.puntosGanados && venta.puntosGanados > 0) {
+    if (!esPedido) {
+      const esRegistrado = !!(venta.clienteId && String(venta.cliente || "").toLowerCase() !== "cliente general");
+      const ganM = esRegistrado ? (Number(venta.puntosGanados) || 0) : 0;
+      let prevM = (venta.puntosPrevios !== undefined && venta.puntosPrevios !== null) ? (Number(venta.puntosPrevios) || 0) : 0;
+      if ((venta.puntosPrevios === undefined || venta.puntosPrevios === null) && esRegistrado && state.clientes && state.clientes[venta.clienteId]) {
+        prevM = Math.max(0, (Number(state.clientes[venta.clienteId].puntos) || 0) - ganM + (Number(venta.puntosCanjados) || 0));
+      }
+      if (!esRegistrado) prevM = 0;
+      const saldoM = Math.max(0, prevM + ganM - (esRegistrado ? (Number(venta.puntosCanjados) || 0) : 0));
       puntosRow.classList.remove("hidden");
       puntosRow.classList.add("flex");
-      puntosGanadosEl.textContent = `+${venta.puntosGanados.toLocaleString()} pts (${venta.cliente || 'Cliente'})`;
+      puntosGanadosEl.textContent = `+${ganM.toLocaleString()} pts • Acumulado: ${prevM.toLocaleString()} • Saldo: ${saldoM.toLocaleString()} (${venta.cliente || 'Cliente'})`;
     } else {
       puntosRow.classList.add("hidden");
       puntosRow.classList.remove("flex");
@@ -4948,8 +4960,21 @@ function compartirReciboWhatsApp() {
   if (!esPedido && v.descuentoPuntos && v.descuentoPuntos > 0) {
     texto += `🎁 *Descuento Puntos:* -${fmtCRC(v.descuentoPuntos)}\n`;
   }
-  if (!esPedido && v.puntosGanados && v.puntosGanados > 0) {
-    texto += `✨ *Puntos Ganados:* +${v.puntosGanados.toLocaleString()} pts\n`;
+  if (!esPedido) {
+    const esRegistrado = !!(v.clienteId && String(v.cliente || "").toLowerCase() !== "cliente general");
+    const gan = esRegistrado ? (Number(v.puntosGanados) || 0) : 0;
+    let prev = (v.puntosPrevios !== undefined && v.puntosPrevios !== null) ? (Number(v.puntosPrevios) || 0) : 0;
+    if ((v.puntosPrevios === undefined || v.puntosPrevios === null) && esRegistrado && state.clientes && state.clientes[v.clienteId]) {
+      prev = Math.max(0, (Number(state.clientes[v.clienteId].puntos) || 0) - gan + (Number(v.puntosCanjados) || 0));
+    }
+    if (!esRegistrado) prev = 0;
+    const canj = esRegistrado ? (Number(v.puntosCanjados) || 0) : 0;
+    const saldo = Math.max(0, prev + gan - canj);
+    texto += `🎁 *PUNTOS DE FIDELIDAD:*\n`;
+    texto += `En esta compra acumulaste: *${gan.toLocaleString()} puntos*\n`;
+    texto += `Ya tenías acumulado: *${prev.toLocaleString()} puntos*\n`;
+    texto += `Nuevo saldo: *${saldo.toLocaleString()} puntos*\n`;
+    texto += `💡 *Recuerda que al tener 4500 puntos acumulados puedes redimirlos.*\n`;
   }
 
   texto += `--------------------------------\n`;
@@ -4975,7 +5000,7 @@ function compartirReciboWhatsApp() {
   window.open(url, "_blank");
 }
 function calcularSaldosFinancieros() {
-  const tcActual = Number(state.config.tipoCambio) || 520;
+  const tcActual = Number(state.config.tipoCambio) || 500;
 
   // 1. Total Ventas Facturadas y Gastos de Envío de Ventas
   // IMPORTANTE: state.ventas puede tener UNA fila por producto cuando vienen de Sheets,
@@ -5308,7 +5333,7 @@ function renderizarHistorialFinanzas() {
   if (!cont) return;
 
   const filtro = state.filtroFinanzas || "todos";
-  const tcActual = parseNum(state.config.tipoCambio, 520) || 520;
+  const tcActual = parseNum(state.config.tipoCambio, 500) || 500;
 
   // 1. Movimientos directos (Aportes, Pagos a socios, Gastos)
   const movsDirectos = (state.movimientosDinero || []).map(m => ({
@@ -5365,7 +5390,7 @@ function renderizarHistorialFinanzas() {
     .filter(c => (c.pagadoPor === "Empresa" || c.financiadoPor === "Empresa"))
     .map(c => {
       const cant = parseNum(c.cantidad, 1);
-      const tc = parseNum(c.tipoCambio || state.config.tipoCambio, 520) || 520;
+      const tc = parseNum(c.tipoCambio || state.config.tipoCambio, 500) || 500;
       const envioCompCRC = parseNum(c.costoEnvioCRC, 0);
       const envioCompUSD = parseNum(c.costoEnvioUSD, 0) || (tc > 0 ? envioCompCRC / tc : 0);
       const cUSD = parseNum(c.totalUSD, 0) || (cant * parseNum(c.costoUnitarioUSD, 0) + envioCompUSD);
@@ -5577,7 +5602,7 @@ function abrirModalMovimientoDinero(tipoPredefinido = "aporte_capital", socioPre
   if (inputFecha) inputFecha.value = todayStr();
 
   const inputTC = document.getElementById("finTipoCambio");
-  if (inputTC) inputTC.value = state.config.tipoCambio || 520;
+  if (inputTC) inputTC.value = state.config.tipoCambio || 500;
 
   const inputCRC = document.getElementById("finMontoCRC");
   if (inputCRC) inputCRC.value = "";
@@ -5622,7 +5647,7 @@ function actualizarCamposModalFinanzas() {
 }
 
 function autoConvertirFinanzas(origen) {
-  const tc = Number(document.getElementById("finTipoCambio").value) || Number(state.config.tipoCambio) || 520;
+  const tc = Number(document.getElementById("finTipoCambio").value) || Number(state.config.tipoCambio) || 500;
   const elCRC = document.getElementById("finMontoCRC");
   const elUSD = document.getElementById("finMontoUSD");
 
@@ -5642,7 +5667,7 @@ async function guardarMovimientoDinero(e) {
   const socio = tipo !== "gasto_operativo" ? document.getElementById("finSocioSelect").value : "";
   const fecha = document.getElementById("finFecha").value || todayStr();
   const montoCRC = Number(document.getElementById("finMontoCRC").value) || 0;
-  const tc = Number(document.getElementById("finTipoCambio").value) || Number(state.config.tipoCambio) || 520;
+  const tc = Number(document.getElementById("finTipoCambio").value) || Number(state.config.tipoCambio) || 500;
   const montoUSD = Number(document.getElementById("finMontoUSD").value) || (montoCRC / tc);
   const metodoPago = document.getElementById("finMetodoPago").value;
   const notas = document.getElementById("finNotas").value.trim();
@@ -5858,7 +5883,7 @@ async function importarArchivoExcel(event) {
             codigo: String(r.codigo || r.Codigo).trim(),
             cantidad: Number(r.cantidad || 1),
             costoUnitarioUSD: Number(r.costoUnitarioUSD || 0),
-            tipoCambio: Number(r.tipoCambio || state.config.tipoCambio || 520),
+            tipoCambio: Number(r.tipoCambio || state.config.tipoCambio || 500),
             costoUnitarioCRC: Number(r.costoUnitarioCRC || 0),
             proveedor: String(r.proveedor || r.Proveedor || ""),
             notas: String(r.notas || r.Notas || "")
@@ -6317,7 +6342,7 @@ async function _descargarDatosSheets(mostrarMensaje = false) {
               cantidad: parseNum(c.cantidad, 1),
               costoUnitarioUSD: parseNum(c.costoUnitarioUSD, 0),
               costoUnitarioCRC: parseNum(c.costoUnitarioCRC, 0),
-              tipoCambio: parseNum(c.tipoCambio, state.config.tipoCambio || 520),
+              tipoCambio: parseNum(c.tipoCambio, state.config.tipoCambio || 500),
               totalUSD: parseNum(c.totalUSD, 0),
               totalCRC: parseNum(c.totalCRC, 0),
               costoEnvioCRC: parseNum(c.costoEnvioCRC, 0),
@@ -6625,7 +6650,7 @@ async function diagnosticarPedidos() {
 
 function guardarPreferenciasNegocio() {
   state.config.nombreNegocio = document.getElementById("businessNameInput").value.trim() || "Libro de Inventario";
-  state.config.tipoCambio = Number(document.getElementById("exchangeRateInput").value) || 520;
+  state.config.tipoCambio = Number(document.getElementById("exchangeRateInput").value) || 500;
   state.config.telefonoNegocio = document.getElementById("businessPhoneInput").value.trim();
   guardarConfiguracionLocal();
   renderizarTodo();
@@ -7131,7 +7156,7 @@ function filtrarPreventistaComision(preventa) {
 
 function calcularDatosComisionesPreventistas() {
   const pct = 0.13; // 13% fijo sobre ventas facturadas
-  const tc = Number(state.config.tipoCambio) || 520;
+  const tc = Number(state.config.tipoCambio) || 500;
 
   // Agrupar ventas por preventista
   const preventasMap = new Map();
@@ -7499,7 +7524,7 @@ function abrirModalLiquidacion(vendedor) {
   _preventaLiqActual = vendedor;
   _saldoMaxLiqActual = data.saldoPendienteCRC;
 
-  const tc = Number(state.config.tipoCambio) || 520;
+  const tc = Number(state.config.tipoCambio) || 500;
   const nombreEl = document.getElementById("modalLiqPreventaNombre");
   const inputVend = document.getElementById("modalLiqPreventaInput");
   const elSaldoCRC = document.getElementById("modalLiqSaldoPendienteCRC");
@@ -7534,7 +7559,7 @@ function cerrarModalLiquidacion() {
 }
 
 function setMontoLiqTotal() {
-  const tc = Number(state.config.tipoCambio) || 520;
+  const tc = Number(state.config.tipoCambio) || 500;
   const inputMontoCRC = document.getElementById("modalLiqMontoCRC");
   const inputMontoUSD = document.getElementById("modalLiqMontoUSD");
   if (inputMontoCRC) inputMontoCRC.value = _saldoMaxLiqActual;
@@ -7542,7 +7567,7 @@ function setMontoLiqTotal() {
 }
 
 function autoConvertirModalLiq(moneda) {
-  const tc = Number(state.config.tipoCambio) || 520;
+  const tc = Number(state.config.tipoCambio) || 500;
   const inputCRC = document.getElementById("modalLiqMontoCRC");
   const inputUSD = document.getElementById("modalLiqMontoUSD");
   if (!inputCRC || !inputUSD || tc <= 0) return;
@@ -7609,7 +7634,7 @@ async function guardarLiquidacionModal(e) {
       cuentaDestino: "Gasto de Comisiones (" + vendedor + ")",
       socio: resp,
       montoUSD: montoUSD,
-      tipoCambio: Number(state.config.tipoCambio) || 520,
+      tipoCambio: Number(state.config.tipoCambio) || 500,
       montoCRC: montoCRC,
       metodoPago: metodo,
       notas: `Pago comisiones a ${vendedor} (${idLiq}) ${notas ? '- ' + notas : ''}`,

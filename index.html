@@ -79,7 +79,7 @@
             <span id="headerVendedorNombre">Carlos</span>
             <i data-lucide="chevron-down" class="w-3 h-3 text-slate-400"></i>
           </button>
-          <span class="text-[10px] text-slate-500 font-mono">| TC: ₡<span id="headerExchangeRate">520</span></span>
+          <span class="text-[10px] text-slate-500 font-mono">| TC: ₡<span id="headerExchangeRate">500</span></span>
         </div>
       </div>
     </div>
@@ -515,7 +515,7 @@
             </div>
             <div>
               <label class="block font-semibold text-slate-300 mb-1">Tipo de Cambio (₡)</label>
-              <input type="number" step="1" id="compraTipoCambio" value="520" oninput="recalcularTotalesListaCompra()" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white font-mono font-bold text-xs">
+              <input type="number" step="1" id="compraTipoCambio" value="500" oninput="recalcularTotalesListaCompra()" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white font-mono font-bold text-xs">
             </div>
           </div>
 
@@ -1123,7 +1123,7 @@
           <div class="grid grid-cols-2 gap-3">
             <div>
               <label class="block font-semibold text-slate-300 mb-1">Tipo de Cambio (₡ / USD):</label>
-              <input type="number" id="exchangeRateInput" value="520" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white font-mono font-bold">
+              <input type="number" id="exchangeRateInput" value="500" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white font-mono font-bold">
             </div>
             <div>
               <label class="block font-semibold text-slate-300 mb-1">Teléfono / WhatsApp:</label>
@@ -1742,7 +1742,7 @@
             <div>
               <label class="block font-semibold text-slate-300 mb-1">Margen Deseado (%)</label>
               <div class="relative">
-                <input type="number" step="0.5" id="prodMargenPorcentaje" value="70" oninput="calcularMargenYPrecioRecomendado('margen')" placeholder="70" class="w-full px-3 py-2 bg-slate-800 border border-amber-500/40 rounded-xl text-amber-300 font-mono font-bold focus:border-amber-400">
+                <input type="number" step="0.01" min="0" id="prodMargenPorcentaje" value="70" oninput="calcularMargenYPrecioRecomendado('margen')" placeholder="70" class="w-full px-3 py-2 bg-slate-800 border border-amber-500/40 rounded-xl text-amber-300 font-mono font-bold focus:border-amber-400">
                 <span class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold font-mono text-xs">%</span>
               </div>
             </div>
