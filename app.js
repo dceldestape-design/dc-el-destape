@@ -81,9 +81,16 @@ let state = {
   escanerActivo: null,
   modoEscaner: "buscar",
   ultimaVentaCompletada: null,
-  ultimoPedidoCompletado: null,
   // Filtro para la vista de clientes
-  filtroClientes: ""
+  filtroClientes: "",
+  // Filtros para la vista de facturas generadas
+  busquedaFacturas: "",
+  filtroVendedorFacturas: "todos", // "todos" | "Carlos" | "Daniel" | "preventa"
+  // Módulo de apartados y abonos
+  apartados: [],
+  abonosApartados: [],
+  busquedaApartados: "",
+  filtroEstadoApartados: "activos" // "activos" | "liquidados" | "entregados" | "todos"
 };
 
 // ==========================================================================
@@ -302,6 +309,16 @@ function cargarEstadoLocal() {
     try { state.vendedoresSatelite = JSON.parse(vends); } catch(e) { state.vendedoresSatelite = []; }
   }
 
+  const apts = localStorage.getItem("inv_apartados_v2");
+  if (apts) {
+    try { state.apartados = JSON.parse(apts); } catch(e) { state.apartados = []; }
+  }
+
+  const abos = localStorage.getItem("inv_abonos_apartados_v2");
+  if (abos) {
+    try { state.abonosApartados = JSON.parse(abos); } catch(e) { state.abonosApartados = []; }
+  }
+
   const savedVista = localStorage.getItem("inv_vista_vendedor");
   if (savedVista) {
     state.vistaVendedor = savedVista;
@@ -335,6 +352,10 @@ function guardarAjustesLocal() {
 }
 function guardarVendedoresLocal() {
   localStorage.setItem("inv_vendedores_satelite_v2", JSON.stringify(state.vendedoresSatelite || []));
+}
+function guardarApartadosLocal() {
+  localStorage.setItem("inv_apartados_v2", JSON.stringify(state.apartados || []));
+  localStorage.setItem("inv_abonos_apartados_v2", JSON.stringify(state.abonosApartados || []));
 }
 function guardarFinanzasLocal() {
   localStorage.setItem("inv_finanzas_v2", JSON.stringify(state.movimientosDinero));
@@ -445,6 +466,26 @@ function calcularStockDetalladoPorCodigo() {
     detalle[cod].total += dif;
   });
 
+  // 5. Restar mercadería apartada / reservada en Apartados activos (no entregados ni cancelados)
+  (state.apartados || []).forEach(apt => {
+    const est = String(apt.estado || "Activo").toLowerCase();
+    if (est === "cancelado" || est === "entregado") return;
+    const vend = String(apt.vendedor || "Carlos").trim();
+    (apt.items || []).forEach(i => {
+      const cod = String(i.codigo || "").trim().toUpperCase();
+      if (!cod) return;
+      if (!detalle[cod]) detalle[cod] = { Carlos: 0, Daniel: 0, total: 0 };
+      const cant = parseNum(i.cantidad, 0);
+      const vendInv = String(i.inventarioVendedor || vend).trim();
+      if (vendInv === "Daniel") {
+        detalle[cod].Daniel -= cant;
+      } else {
+        detalle[cod].Carlos -= cant;
+      }
+      detalle[cod].total -= cant;
+    });
+  });
+
   return detalle;
 }
 
@@ -539,7 +580,7 @@ function calcularCostosPorCodigo(vista = state.vistaVendedor) {
 // NAVEGACIÓN Y VISTAS
 // ==========================================================================
 function cambiarVista(vista) {
-  const vistas = ["dashboard", "inventario", "ventas", "compras", "finanzas", "configuracion", "clientes", "cuentas", "comisiones", "ajustes", "vendedores"];
+  const vistas = ["dashboard", "inventario", "ventas", "compras", "finanzas", "configuracion", "clientes", "cuentas", "comisiones", "ajustes", "vendedores", "facturas", "apartados"];
   
   vistas.forEach(v => {
     const el = document.getElementById("view" + capitalizar(v));
@@ -571,6 +612,8 @@ function cambiarVista(vista) {
   if (vista === "comisiones") renderizarModuloComisiones();
   if (vista === "ajustes") renderizarModuloAjustes();
   if (vista === "vendedores") renderizarModuloVendedores();
+  if (vista === "facturas") renderizarModuloFacturas();
+  if (vista === "apartados") renderizarModuloApartados();
   if (vista === "configuracion") {
     cargarConfigPuntosUI();
     const surl = document.getElementById("sheetsApiUrl");
@@ -628,6 +671,9 @@ function renderizarTodo() {
   renderizarHistorialAnulaciones();
   renderizarModuloComisiones();
   renderizarModuloAjustes();
+  renderizarModuloVendedores();
+  renderizarModuloFacturas();
+  renderizarModuloApartados();
   inicializarIconos();
 }
 
@@ -2177,6 +2223,7 @@ function renderizarClientes() {
         <div class="flex-1 min-w-0">
           <div class="text-sm font-bold text-white truncate">${c.nombre}</div>
           <div class="text-[11px] text-slate-400 font-mono">${c.telefono} • Última: ${ultimaVenta}</div>
+          ${c.creadoPor ? `<div class="text-[10px] text-slate-500 font-mono">👤 Registrado por: <b class="text-slate-300">${c.creadoPor}</b></div>` : ''}
         </div>
         <div class="text-right shrink-0">
           <div class="text-sm font-black text-amber-400 font-mono">🏅 ${puntos.toLocaleString()}</div>
@@ -4347,6 +4394,7 @@ function vaciarCarrito() {
 function cambiarModoPOS(modo) {
   state.modoPOS = modo;
   const btnVenta = document.getElementById("btnModoVenta");
+  const btnApartado = document.getElementById("btnModoApartado");
   const btnPedido = document.getElementById("btnModoPedido");
   const btnCheckout = document.getElementById("btnCheckout");
   const cartIcon = document.getElementById("cartHeaderIcon");
@@ -4354,14 +4402,18 @@ function cambiarModoPOS(modo) {
   const panelPuntos = document.getElementById("panelPuntosCliente");
   const totalesYPagos = document.getElementById("posTotalesYPagosContainer");
   const bannerPedido = document.getElementById("posBannerModoPedido");
+  const bannerApartado = document.getElementById("posBannerModoApartado");
   const cashHelper = document.getElementById("cashHelper");
 
   if (modo === "pedido") {
     if (btnVenta) {
-      btnVenta.className = "py-2 rounded-lg bg-transparent text-slate-400 hover:text-white flex items-center justify-center gap-1.5 active:scale-95 transition-all";
+      btnVenta.className = "py-2 rounded-lg bg-transparent text-slate-400 hover:text-white flex items-center justify-center gap-1 active:scale-95 transition-all text-[11px]";
+    }
+    if (btnApartado) {
+      btnApartado.className = "py-2 rounded-lg bg-transparent text-slate-400 hover:text-white flex items-center justify-center gap-1 active:scale-95 transition-all text-[11px]";
     }
     if (btnPedido) {
-      btnPedido.className = "py-2 rounded-lg bg-amber-600 text-white shadow-md flex items-center justify-center gap-1.5 active:scale-95 transition-all";
+      btnPedido.className = "py-2 rounded-lg bg-amber-600 text-white shadow-md flex items-center justify-center gap-1 active:scale-95 transition-all text-[11px]";
     }
     if (btnCheckout) {
       btnCheckout.className = "w-full py-3.5 bg-gradient-to-r from-amber-500 to-orange-600 text-white text-sm font-extrabold rounded-xl shadow-lg shadow-amber-500/25 active:scale-95 transition-all flex items-center justify-center gap-2";
@@ -4374,15 +4426,45 @@ function cambiarModoPOS(modo) {
     if (totalesYPagos) totalesYPagos.classList.add("hidden");
     if (panelPuntos) panelPuntos.classList.add("hidden");
     if (bannerPedido) bannerPedido.classList.remove("hidden");
+    if (bannerApartado) bannerApartado.classList.add("hidden");
     if (cashHelper) cashHelper.classList.add("hidden");
 
     mostrarToast("Modo 'Encargo / Pedido' (solo cantidades) 📋", "info");
-  } else {
+  } else if (modo === "apartado") {
     if (btnVenta) {
-      btnVenta.className = "py-2 rounded-lg bg-emerald-600 text-white shadow-md flex items-center justify-center gap-1.5 active:scale-95 transition-all";
+      btnVenta.className = "py-2 rounded-lg bg-transparent text-slate-400 hover:text-white flex items-center justify-center gap-1 active:scale-95 transition-all text-[11px]";
+    }
+    if (btnApartado) {
+      btnApartado.className = "py-2 rounded-lg bg-blue-600 text-white shadow-md flex items-center justify-center gap-1 active:scale-95 transition-all text-[11px]";
     }
     if (btnPedido) {
-      btnPedido.className = "py-2 rounded-lg bg-transparent text-slate-400 hover:text-white flex items-center justify-center gap-1.5 active:scale-95 transition-all";
+      btnPedido.className = "py-2 rounded-lg bg-transparent text-slate-400 hover:text-white flex items-center justify-center gap-1 active:scale-95 transition-all text-[11px]";
+    }
+    if (btnCheckout) {
+      btnCheckout.className = "w-full py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-sm font-extrabold rounded-xl shadow-lg shadow-blue-500/25 active:scale-95 transition-all flex items-center justify-center gap-2";
+      btnCheckout.innerHTML = `<i data-lucide="bookmark-check" class="w-5 h-5"></i><span>GUARDAR APARTADO</span>`;
+    }
+    if (cartIcon) cartIcon.className = "w-4 h-4 text-blue-400";
+    if (cartTitle) cartTitle.innerHTML = `Lista de Apartado (<span id="cartCount">${state.carrito.length}</span>)`;
+
+    // Ocultar pagos regulares de venta directa, activar panel de apartado
+    if (totalesYPagos) totalesYPagos.classList.add("hidden");
+    if (panelPuntos) panelPuntos.classList.add("hidden");
+    if (bannerPedido) bannerPedido.classList.add("hidden");
+    if (bannerApartado) bannerApartado.classList.remove("hidden");
+    if (cashHelper) cashHelper.classList.add("hidden");
+
+    actualizarCalculoApartadoUI();
+    mostrarToast("Modo 'Apartado' (reserva de mercadería) 🔖", "info");
+  } else {
+    if (btnVenta) {
+      btnVenta.className = "py-2 rounded-lg bg-emerald-600 text-white shadow-md flex items-center justify-center gap-1 active:scale-95 transition-all text-[11px]";
+    }
+    if (btnApartado) {
+      btnApartado.className = "py-2 rounded-lg bg-transparent text-slate-400 hover:text-white flex items-center justify-center gap-1 active:scale-95 transition-all text-[11px]";
+    }
+    if (btnPedido) {
+      btnPedido.className = "py-2 rounded-lg bg-transparent text-slate-400 hover:text-white flex items-center justify-center gap-1 active:scale-95 transition-all text-[11px]";
     }
     if (btnCheckout) {
       btnCheckout.className = "w-full py-3.5 bg-gradient-to-r from-emerald-500 to-teal-600 text-white text-sm font-extrabold rounded-xl shadow-lg shadow-emerald-500/25 active:scale-95 transition-all flex items-center justify-center gap-2";
@@ -4394,6 +4476,7 @@ function cambiarModoPOS(modo) {
     // Mostrar montos, métodos de pago y puntos
     if (totalesYPagos) totalesYPagos.classList.remove("hidden");
     if (bannerPedido) bannerPedido.classList.add("hidden");
+    if (bannerApartado) bannerApartado.classList.add("hidden");
     if (state.clienteSeleccionado && panelPuntos) panelPuntos.classList.remove("hidden");
     if (state.metodoPagoSeleccionado === "Efectivo" && cashHelper) cashHelper.classList.remove("hidden");
 
@@ -4402,6 +4485,34 @@ function cambiarModoPOS(modo) {
 
   inicializarIconos();
   renderizarCarrito();
+}
+
+function actualizarCalculoApartadoUI() {
+  const resumenBotellas = document.getElementById("posApartadoResumenBotellas");
+  const totalCRCEl = document.getElementById("posApartadoTotalCRC");
+  const saldoCRCEl = document.getElementById("posApartadoSaldoCRC");
+  const inputAbono = document.getElementById("posApartadoAbonoCRC");
+
+  let totalCRC = 0;
+  let totalBotellas = 0;
+  (state.carrito || []).forEach(it => {
+    totalCRC += (it.cantidad * (it.precioVentaCRC || 0));
+    totalBotellas += it.cantidad;
+  });
+
+  const abono = Math.max(0, Number(inputAbono ? inputAbono.value : 0) || 0);
+  const saldo = Math.max(0, totalCRC - abono);
+
+  if (resumenBotellas) resumenBotellas.textContent = `${totalBotellas} botella(s)`;
+  if (totalCRCEl) totalCRCEl.textContent = fmtCRC(totalCRC);
+  if (saldoCRCEl) {
+    saldoCRCEl.textContent = fmtCRC(saldo);
+    if (saldo <= 0 && totalCRC > 0) {
+      saldoCRCEl.className = "text-sm font-black text-emerald-400 font-mono";
+    } else {
+      saldoCRCEl.className = "text-sm font-black text-amber-400 font-mono";
+    }
+  }
 }
 
 function renderizarCarrito() {
@@ -4413,6 +4524,7 @@ function renderizarCarrito() {
   if (!cont) return;
 
   const esModoPedido = state.modoPOS === "pedido";
+  const esModoApartado = state.modoPOS === "apartado";
 
   let totalBrutoCRC = 0;
   let totalUSD = 0;
@@ -4432,6 +4544,10 @@ function renderizarCarrito() {
   if (countEl) countEl.textContent = totalItems;
   if (pedidoTotalUnidades) pedidoTotalUnidades.textContent = `${totalItems} unids`;
 
+  if (esModoApartado) {
+    actualizarCalculoApartadoUI();
+  }
+
   if (totalCRCEl && totalUSDEl) {
     if (descuento > 0) {
       totalCRCEl.innerHTML = `
@@ -4449,8 +4565,8 @@ function renderizarCarrito() {
   if (state.carrito.length === 0) {
     cont.innerHTML = `
       <div class="flex flex-col items-center justify-center py-6 text-slate-500 text-xs">
-        <i data-lucide="${esModoPedido ? 'clipboard-list' : 'shopping-cart'}" class="w-8 h-8 stroke-1 mb-1 text-slate-600"></i>
-        <span>${esModoPedido ? 'Lista de encargo vacía. Agrega los licores pedidos.' : 'Carrito vacío. Agrega licores para vender.'}</span>
+        <i data-lucide="${esModoPedido ? 'clipboard-list' : (esModoApartado ? 'bookmark' : 'shopping-cart')}" class="w-8 h-8 stroke-1 mb-1 text-slate-600"></i>
+        <span>${esModoPedido ? 'Lista de encargo vacía. Agrega los licores pedidos.' : (esModoApartado ? 'Lista de apartado vacía. Agrega licores a apartar.' : 'Carrito vacío. Agrega licores para vender.')}</span>
       </div>
     `;
   } else {
@@ -4568,6 +4684,9 @@ function calcularCambio() {
 async function completarVenta() {
   if (state.modoPOS === "pedido") {
     return guardarPedidoCliente();
+  }
+  if (state.modoPOS === "apartado") {
+    return guardarApartadoCliente();
   }
 
   if (state.carrito.length === 0) {
@@ -4838,6 +4957,153 @@ function guardarPedidoCliente() {
   // Encolar y sincronizar con Google Sheets
   encolarAccionSincronizacion("registrarPedido", { pedido: pedidoObj });
 }
+
+// ==========================================================================
+// GUARDAR APARTADO DE CLIENTE
+// ==========================================================================
+function guardarApartadoCliente() {
+  if (state.carrito.length === 0) {
+    mostrarToast("Agrega licores al apartado antes de guardar", "error");
+    return;
+  }
+
+  const vendedor = state.vendedorActual || "Carlos";
+  const cli = state.clienteSeleccionado;
+  const clienteInputVal = document.getElementById("posClienteInput")?.value?.trim();
+  const clienteNombre = cli ? cli.nombre : (clienteInputVal || "");
+  const clienteTelefono = cli ? cli.telefono : "";
+
+  if (!clienteNombre || clienteNombre.toLowerCase() === "cliente general") {
+    mostrarToast("⚠️ Debes asignar o escribir el nombre del cliente para el apartado.", "error");
+    const inCli = document.getElementById("posClienteInput");
+    if (inCli) {
+      inCli.focus();
+      inCli.classList.add("border-blue-500", "animate-pulse");
+      setTimeout(() => inCli.classList.remove("animate-pulse"), 2000);
+    }
+    return;
+  }
+
+  const tc = Number(state.config.tipoCambio) || 500;
+  let totalCRC = 0;
+  let totalUSD = 0;
+  state.carrito.forEach(i => {
+    const subCRC = i.cantidad * i.precioVentaCRC;
+    const subUSD = i.cantidad * (i.precioVentaUSD || (i.precioVentaCRC / tc));
+    totalCRC += subCRC;
+    totalUSD += subUSD;
+  });
+
+  const inputAbono = document.getElementById("posApartadoAbonoCRC");
+  const abonoInicialCRC = Math.max(0, Number(inputAbono ? inputAbono.value : 0) || 0);
+
+  if (abonoInicialCRC > totalCRC) {
+    mostrarToast("El abono inicial no puede ser mayor al total del apartado.", "error");
+    if (inputAbono) inputAbono.focus();
+    return;
+  }
+
+  const abonoInicialUSD = abonoInicialCRC > 0 ? (abonoInicialCRC / tc) : 0;
+  const saldoPendienteCRC = Math.max(0, totalCRC - abonoInicialCRC);
+  const saldoPendienteUSD = Math.max(0, totalUSD - abonoInicialUSD);
+  const metodoPagoAbono = document.getElementById("posApartadoMetodoPago")?.value || "Efectivo";
+  const fechaVenc = document.getElementById("posApartadoFechaVenc")?.value || "";
+  const notas = document.getElementById("posApartadoNotas")?.value?.trim() || "";
+
+  const idApartado = "APT-" + Date.now().toString().slice(-6);
+  const fechaISO = new Date().toISOString();
+  const estado = saldoPendienteCRC <= 0 ? "Liquidado" : "Activo";
+
+  const abonosList = [];
+  if (abonoInicialCRC > 0) {
+    const idAbono = "ABO-" + Date.now().toString().slice(-6);
+    const abonoObj = {
+      id: idAbono,
+      fecha: fechaISO,
+      idApartado: idApartado,
+      cliente: clienteNombre,
+      telefono: clienteTelefono,
+      montoCRC: abonoInicialCRC,
+      montoUSD: abonoInicialUSD,
+      metodoPago: metodoPagoAbono,
+      saldoRestanteCRC: saldoPendienteCRC,
+      saldoRestanteUSD: saldoPendienteUSD,
+      recibidoPor: vendedor,
+      notas: "Abono inicial al momento de apartar"
+    };
+    abonosList.push(abonoObj);
+    if (!state.abonosApartados) state.abonosApartados = [];
+    state.abonosApartados.unshift(abonoObj);
+  }
+
+  const itemsApartado = state.carrito.map(it => ({
+    codigo: String(it.codigo || "").trim().toUpperCase(),
+    nombre: String(it.nombre || it.codigo).trim(),
+    cantidad: Number(it.cantidad || 1),
+    precioVentaCRC: Number(it.precioVentaCRC || 0),
+    precioVentaUSD: Number(it.precioVentaUSD || (it.precioVentaCRC / tc)),
+    subtotalCRC: Number(it.cantidad || 1) * Number(it.precioVentaCRC || 0),
+    subtotalUSD: Number(it.cantidad || 1) * Number(it.precioVentaUSD || (it.precioVentaCRC / tc)),
+    inventarioVendedor: String(it.inventarioVendedor || vendedor).trim()
+  }));
+
+  const apartadoObj = {
+    id: idApartado,
+    fecha: fechaISO,
+    vendedor: vendedor,
+    cliente: clienteNombre,
+    clienteId: cli ? cli.id : null,
+    clienteTelefono: clienteTelefono,
+    items: itemsApartado,
+    montoTotalCRC: totalCRC,
+    montoTotalUSD: totalUSD,
+    totalAbonadoCRC: abonoInicialCRC,
+    totalAbonadoUSD: abonoInicialUSD,
+    saldoPendienteCRC: saldoPendienteCRC,
+    saldoPendienteUSD: saldoPendienteUSD,
+    estado: estado,
+    fechaVencimiento: fechaVenc,
+    fechaEntrega: "",
+    notas: notas,
+    abonos: abonosList
+  };
+
+  if (!state.apartados) state.apartados = [];
+  state.apartados.unshift(apartadoObj);
+  guardarApartadosLocal();
+
+  if (window.confetti) {
+    window.confetti({ particleCount: 70, spread: 55, origin: { y: 0.8 } });
+  }
+
+  // Limpiar formulario y carrito
+  state.carrito = [];
+  state.clienteSeleccionado = null;
+  const inCli = document.getElementById("posClienteInput");
+  if (inCli) inCli.value = "";
+  if (inputAbono) inputAbono.value = "0";
+  const inNotas = document.getElementById("posApartadoNotas");
+  if (inNotas) inNotas.value = "";
+
+  renderizarTodo();
+  renderizarPanelCliente();
+
+  mostrarToast(`🔖 Apartado ${idApartado} creado. Mercadería reservada para ${clienteNombre}.`, "success");
+
+  // Encolar acción para sincronizar con Google Sheets
+  encolarAccionSincronizacion("registrarApartado", {
+    apartado: {
+      ...apartadoObj,
+      abonoInicialCRC: abonoInicialCRC,
+      abonoInicialUSD: abonoInicialUSD,
+      metodoPagoAbono: metodoPagoAbono
+    }
+  });
+
+  // Reenviar / Compartir por WhatsApp comprobante de apartado
+  compartirApartadoWhatsApp(idApartado);
+}
+
 
 // ==========================================================================
 // MODAL RECIBO Y WHATSAPP
@@ -6052,6 +6318,14 @@ function describirAccionSincronizacion(accion, datos) {
       return "Eliminando liquidación...";
     case "registrarAjuste":
       return (datos.ajuste && datos.ajuste.nombre) ? ("Registrando ajuste de inventario (" + datos.ajuste.nombre + ")...") : "Registrando ajuste de inventario en Sheets...";
+    case "registrarApartado":
+      return (datos.apartado && datos.apartado.id) ? ("Enviando apartado (" + datos.apartado.id + ")...") : "Enviando apartado a Sheets...";
+    case "abonarApartado":
+      return "Enviando abono de apartado (" + (datos.idApartado || '') + ")...";
+    case "entregarApartado":
+      return "Marcando apartado (" + (datos.idApartado || datos.id || '') + ") como entregado...";
+    case "cancelarApartado":
+      return "Cancelando apartado (" + (datos.idApartado || datos.id || '') + ") en Sheets...";
     default:
       return "Enviando " + accion + "...";
   }
@@ -6538,6 +6812,18 @@ async function _descargarDatosSheets(mostrarMensaje = false) {
         guardarVendedoresLocal();
       }
 
+      // 12. Apartados y Abonos: Reflejar hojas Apartados y Abonos_Apartados de Sheets
+      if (json.data.apartados !== undefined) {
+        const apartadosSheets = Array.isArray(json.data.apartados) ? json.data.apartados : [];
+        state.apartados = apartadosSheets;
+        guardarApartadosLocal();
+      }
+      if (json.data.abonosApartados !== undefined) {
+        const abonosSheets = Array.isArray(json.data.abonosApartados) ? json.data.abonosApartados : [];
+        state.abonosApartados = abonosSheets;
+        guardarApartadosLocal();
+      }
+
       renderizarTodo();
       actualizarBadgeConexion();
       if (mostrarMensaje) {
@@ -6815,7 +7101,9 @@ function obtenerListaVentasAgrupadas() {
           nombre: it.nombre || it.codigo,
           cantidad: parseNum(it.cantidad, 1),
           precioCRC: parseNum(it.precioVentaCRC !== undefined ? it.precioVentaCRC : it.precioCRC, 0),
+          precioVentaCRC: parseNum(it.precioVentaCRC !== undefined ? it.precioVentaCRC : it.precioCRC, 0),
           precioUSD: parseNum(it.precioVentaUSD !== undefined ? it.precioVentaUSD : it.precioUSD, 0),
+          precioVentaUSD: parseNum(it.precioVentaUSD !== undefined ? it.precioVentaUSD : it.precioUSD, 0),
           subtotalCRC: parseNum(it.subtotalCRC, parseNum(it.cantidad, 1) * parseNum(it.precioVentaCRC || it.precioCRC, 0)),
           subtotalUSD: parseNum(it.subtotalUSD, parseNum(it.cantidad, 1) * parseNum(it.precioVentaUSD || it.precioUSD, 0)),
           inventarioVendedor: String(it.inventarioVendedor || vendVenta).trim()
@@ -6826,7 +7114,9 @@ function obtenerListaVentasAgrupadas() {
           nombre: v.nombre || v.codigo,
           cantidad: cant,
           precioCRC: pCRC,
+          precioVentaCRC: pCRC,
           precioUSD: pUSD,
+          precioVentaUSD: pUSD,
           subtotalCRC: subCRC,
           subtotalUSD: subUSD,
           inventarioVendedor: invVend
@@ -6837,11 +7127,21 @@ function obtenerListaVentasAgrupadas() {
         id: id,
         fecha: v.fecha || "",
         vendedor: vendVenta,
+        facturadoPor: String(v.facturadoPor || vendVenta).trim(),
+        pedidoOrigenId: String(v.pedidoOrigenId || "").trim(),
+        pedidoOrigenVendedor: String(v.pedidoOrigenVendedor || "").trim(),
         cliente: v.cliente || "Cliente General",
+        clienteId: v.clienteId || null,
         clienteTelefono: v.clienteTelefono || "",
         metodoPago: v.metodoPago || "Efectivo",
+        descuentoPuntos: parseNum(v.descuentoPuntos, 0),
+        puntosGanados: parseNum(v.puntosGanados, 0),
+        puntosCanjados: parseNum(v.puntosCanjados, 0),
+        costoEnvioCRC: parseNum(v.costoEnvioCRC, 0),
+        costoEnvioUSD: parseNum(v.costoEnvioUSD, 0),
         totalCRC: subCRC,
         totalUSD: subUSD,
+        totalFinalCRC: parseNum(v.totalFinalCRC !== undefined ? v.totalFinalCRC : subCRC, subCRC),
         items: items
       });
     } else {
@@ -6857,12 +7157,23 @@ function obtenerListaVentasAgrupadas() {
 
       ventaPadre.totalCRC += subCRC;
       ventaPadre.totalUSD += subUSD;
+      if (ventaPadre.totalFinalCRC !== undefined) {
+        ventaPadre.totalFinalCRC += subCRC;
+      }
+      if (!ventaPadre.facturadoPor && v.facturadoPor) ventaPadre.facturadoPor = v.facturadoPor;
+      if (!ventaPadre.pedidoOrigenId && v.pedidoOrigenId) ventaPadre.pedidoOrigenId = v.pedidoOrigenId;
+      if (!ventaPadre.pedidoOrigenVendedor && v.pedidoOrigenVendedor) ventaPadre.pedidoOrigenVendedor = v.pedidoOrigenVendedor;
+      if (!ventaPadre.clienteTelefono && v.clienteTelefono) ventaPadre.clienteTelefono = v.clienteTelefono;
+      if (v.descuentoPuntos) ventaPadre.descuentoPuntos = parseNum(v.descuentoPuntos, 0);
+
       ventaPadre.items.push({
         codigo: v.codigo,
         nombre: v.nombre || v.codigo,
         cantidad: cant,
         precioCRC: pCRC,
+        precioVentaCRC: pCRC,
         precioUSD: pUSD,
+        precioVentaUSD: pUSD,
         subtotalCRC: subCRC,
         subtotalUSD: subUSD,
         inventarioVendedor: invVend
@@ -6870,7 +7181,11 @@ function obtenerListaVentasAgrupadas() {
     }
   });
 
-  return Array.from(agrupadas.values());
+  return Array.from(agrupadas.values()).sort((a, b) => {
+    const fA = a.fecha ? new Date(a.fecha).getTime() : 0;
+    const fB = b.fecha ? new Date(b.fecha).getTime() : 0;
+    return fB - fA;
+  });
 }
 
 function poblarSelectorVentasParaAnular(filtroTexto = "") {
@@ -8341,3 +8656,954 @@ function eliminarVendedorSateliteConfirmar(id) {
     procesarColaSincronizacion(false);
   }
 }
+
+// ==========================================================================
+// MÓDULO FACTURAS GENERADAS (HISTORIAL COMPLETO Y REENVÍO WHATSAPP)
+// ==========================================================================
+function renderizarModuloFacturas() {
+  const cont = document.getElementById("facturasListContainer");
+  const countBadge = document.getElementById("facturasTotalCount");
+  const montoCRCBadge = document.getElementById("facturasTotalMontoCRC");
+  const montoUSDBadge = document.getElementById("facturasTotalMontoUSD");
+  if (!cont) return;
+
+  const q = String(state.busquedaFacturas || "").trim().toLowerCase();
+  const filtroVend = String(state.filtroVendedorFacturas || "todos").trim();
+
+  // Obtener todas las facturas agrupadas (sin filtrar ninguna compra por defecto)
+  let lista = obtenerListaVentasAgrupadas();
+
+  // Filtro por vendedor (por defecto 'todos' no filtra nada, mostrando todo el historial)
+  if (filtroVend !== "todos") {
+    if (filtroVend === "preventa") {
+      lista = lista.filter(f => !!f.pedidoOrigenId || (f.pedidoOrigenVendedor && f.pedidoOrigenVendedor !== "Carlos" && f.pedidoOrigenVendedor !== "Daniel"));
+    } else {
+      lista = lista.filter(f => {
+        const facturador = String(f.facturadoPor || f.vendedor || "").trim().toLowerCase();
+        const vend = String(f.vendedor || "").trim().toLowerCase();
+        const fVend = filtroVend.toLowerCase();
+        return facturador === fVend || vend === fVend;
+      });
+    }
+  }
+
+  // Filtro por texto de búsqueda
+  if (q) {
+    lista = lista.filter(f =>
+      String(f.id || "").toLowerCase().includes(q) ||
+      String(f.cliente || "").toLowerCase().includes(q) ||
+      String(f.vendedor || "").toLowerCase().includes(q) ||
+      String(f.facturadoPor || "").toLowerCase().includes(q) ||
+      String(f.pedidoOrigenId || "").toLowerCase().includes(q) ||
+      String(f.pedidoOrigenVendedor || "").toLowerCase().includes(q) ||
+      (f.items || []).some(i => String(i.nombre || i.codigo || "").toLowerCase().includes(q))
+    );
+  }
+
+  // Totales
+  let totalMontoCRC = 0;
+  let totalMontoUSD = 0;
+  lista.forEach(f => {
+    totalMontoCRC += parseNum(f.totalFinalCRC !== undefined ? f.totalFinalCRC : f.totalCRC, 0);
+    totalMontoUSD += parseNum(f.totalUSD, 0);
+  });
+
+  if (countBadge) countBadge.textContent = lista.length;
+  if (montoCRCBadge) montoCRCBadge.textContent = fmtCRC(totalMontoCRC);
+  if (montoUSDBadge) montoUSDBadge.textContent = fmtUSD(totalMontoUSD);
+
+  // Actualizar estado activo de los botones de filtro
+  ["todos", "Carlos", "Daniel", "preventa"].forEach(v => {
+    const btn = document.getElementById("filtroFacturaVend-" + v);
+    if (btn) {
+      if (v === filtroVend) {
+        btn.className = "px-3 py-1 rounded-xl font-bold text-xs bg-emerald-600 text-white transition-all active:scale-95 shrink-0 shadow-sm";
+      } else {
+        btn.className = "px-3 py-1 rounded-xl font-bold text-xs bg-slate-800 text-slate-300 hover:text-white transition-all active:scale-95 shrink-0";
+      }
+    }
+  });
+
+  if (lista.length === 0) {
+    cont.innerHTML = `
+      <div class="text-center py-10 text-slate-500 bg-slate-900/60 rounded-3xl border border-slate-800 space-y-2.5">
+        <div class="w-12 h-12 mx-auto rounded-2xl bg-slate-800 flex items-center justify-center text-slate-500">
+          <i data-lucide="receipt" class="w-6 h-6 stroke-1"></i>
+        </div>
+        <p class="text-xs font-bold text-slate-300">${q ? "No se encontraron facturas con ese criterio." : "No hay facturas registradas en el sistema."}</p>
+        <p class="text-[11px] text-slate-500 max-w-xs mx-auto">Las ventas realizadas en la aplicación o descargadas desde Google Sheets aparecerán aquí detalladas.</p>
+        <div class="pt-1">
+          <button onclick="sincronizarConSheets(true)" class="px-3.5 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 font-bold rounded-xl text-xs inline-flex items-center gap-1.5 active:scale-95 transition-all">
+            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+            <span>Sincronizar con Google Sheets</span>
+          </button>
+        </div>
+      </div>
+    `;
+    inicializarIconos();
+    return;
+  }
+
+  cont.innerHTML = lista.map(f => {
+    const fStr = f.fecha ? new Date(f.fecha).toLocaleDateString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "Sin fecha";
+    const totalBotellas = (f.items || []).reduce((acc, it) => acc + parseNum(it.cantidad, 1), 0);
+    const facturador = f.facturadoPor || f.vendedor || "Carlos";
+    const esPreventa = !!f.pedidoOrigenId;
+
+    // Badges de pago
+    let pagoBadgeClass = "bg-slate-800 text-slate-300 border-slate-700";
+    if (f.metodoPago === "Efectivo") pagoBadgeClass = "bg-emerald-950/80 text-emerald-300 border-emerald-500/40";
+    else if (f.metodoPago === "SINPE / Transf." || f.metodoPago === "SINPE") pagoBadgeClass = "bg-blue-950/80 text-blue-300 border-blue-500/40";
+    else if (f.metodoPago === "Pago Luego") pagoBadgeClass = "bg-amber-950/80 text-amber-300 border-amber-500/40";
+    else if (f.metodoPago === "Tarjeta") pagoBadgeClass = "bg-purple-950/80 text-purple-300 border-purple-500/40";
+
+    return `
+      <div class="p-3.5 bg-slate-900/90 border border-slate-800 hover:border-emerald-500/40 rounded-3xl space-y-2.5 text-xs shadow-xl transition-all">
+        <!-- Cabecera de la Factura -->
+        <div class="flex items-center justify-between border-b border-slate-800/80 pb-2">
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
+              <i data-lucide="receipt" class="w-3 h-3"></i>
+              <span>${f.id}</span>
+            </span>
+            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold border ${pagoBadgeClass}">
+              ${f.metodoPago || 'Efectivo'}
+            </span>
+          </div>
+          <span class="text-[10px] text-slate-400 font-mono">${fStr}</span>
+        </div>
+
+        <!-- Info del Cliente y Facturador -->
+        <div class="flex items-start justify-between gap-2">
+          <div>
+            <div class="flex items-center gap-1.5">
+              <span class="text-xs font-black text-white">${f.cliente || "Cliente General"}</span>
+              ${f.clienteTelefono ? `<span class="text-[10px] text-emerald-400 font-mono">📱 ${f.clienteTelefono}</span>` : ''}
+            </div>
+            ${esPreventa ? `
+              <div class="flex items-center gap-1 mt-0.5">
+                <span class="text-[9.5px] px-1.5 py-0.2 rounded bg-sky-950/80 text-sky-300 border border-sky-500/30 font-mono">
+                  📋 Preventa: ${f.pedidoOrigenId}
+                </span>
+                ${f.pedidoOrigenVendedor ? `<span class="text-[9.5px] text-slate-400">(Tomó: <b class="text-sky-300">${f.pedidoOrigenVendedor}</b>)</span>` : ''}
+              </div>
+            ` : ''}
+          </div>
+          <div class="text-right shrink-0">
+            <span class="text-[10px] text-slate-400 block">Facturó: <b class="text-white font-mono">${facturador}</b></span>
+          </div>
+        </div>
+
+        <!-- Desglose de Productos -->
+        <div class="pt-1.5 border-t border-slate-800/80 text-[11px] text-slate-300 space-y-1">
+          ${(f.items || []).map(it => `
+            <div class="flex items-center justify-between font-mono py-0.5">
+              <span class="truncate pr-2"><b class="text-amber-400 font-sans">${it.cantidad}x</b> ${it.nombre || it.codigo}</span>
+              <span class="text-emerald-400 font-bold shrink-0">${fmtCRC(it.subtotalCRC || (it.cantidad * (it.precioVentaCRC || it.precioCRC || 0)))}</span>
+            </div>
+          `).join("")}
+        </div>
+
+        <!-- Descuentos / Envío si existieran -->
+        ${(f.descuentoPuntos && f.descuentoPuntos > 0) || (f.costoEnvioCRC && f.costoEnvioCRC > 0) ? `
+          <div class="pt-1 border-t border-slate-800/60 flex items-center justify-between text-[10px] text-slate-400">
+            ${f.descuentoPuntos > 0 ? `<span class="text-amber-300">🎁 Desc. Puntos: -${fmtCRC(f.descuentoPuntos)}</span>` : '<span></span>'}
+            ${f.costoEnvioCRC > 0 ? `<span class="text-slate-400">🛵 Envío: ${fmtCRC(f.costoEnvioCRC)}</span>` : ''}
+          </div>
+        ` : ''}
+
+        <!-- Totales y Botones de Acción -->
+        <div class="pt-2 border-t border-slate-800/80 flex items-center justify-between gap-2 flex-wrap sm:flex-nowrap">
+          <div>
+            <span class="text-[10px] text-slate-400 block font-sans">Total (${totalBotellas} unids):</span>
+            <div class="flex items-baseline gap-1.5">
+              <span class="text-sm font-black text-emerald-400 font-mono">${fmtCRC(f.totalFinalCRC !== undefined ? f.totalFinalCRC : f.totalCRC)}</span>
+              <span class="text-[10px] text-slate-400 font-mono">(${fmtUSD(f.totalUSD)})</span>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-1.5 shrink-0 ml-auto">
+            <!-- Botón Ver Recibo (Modal) -->
+            <button onclick="verReciboFacturaGenerada('${f.id}')" title="Ver comprobante en pantalla"
+              class="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-bold rounded-xl active:scale-95 transition-all flex items-center gap-1 text-[11px]">
+              <i data-lucide="eye" class="w-3.5 h-3.5 text-slate-300"></i>
+              <span>Ver</span>
+            </button>
+
+            <!-- Botón Descargar Ticket -->
+            <button onclick="descargarTicketFacturaGenerada('${f.id}')" title="Descargar comprobante .txt"
+              class="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-bold rounded-xl active:scale-95 transition-all flex items-center gap-1 text-[11px]">
+              <i data-lucide="download" class="w-3.5 h-3.5 text-amber-400"></i>
+              <span class="hidden sm:inline">Ticket</span>
+            </button>
+
+            <!-- Botón Enviar por WhatsApp -->
+            <button onclick="compartirFacturaGeneradaWhatsApp('${f.id}')" title="Reenviar comprobante por WhatsApp"
+              class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl active:scale-95 transition-all flex items-center gap-1.5 shadow-md shadow-emerald-600/30 text-[11px]">
+              <i data-lucide="message-circle" class="w-3.5 h-3.5"></i>
+              <span>WhatsApp</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  inicializarIconos();
+}
+
+function filtrarFacturasUI() {
+  const input = document.getElementById("searchFacturasInput");
+  state.busquedaFacturas = input ? input.value : "";
+  renderizarModuloFacturas();
+}
+
+function cambiarFiltroVendedorFacturas(vendedor) {
+  state.filtroVendedorFacturas = vendedor || "todos";
+  renderizarModuloFacturas();
+}
+
+function compartirFacturaGeneradaWhatsApp(idFactura) {
+  const lista = obtenerListaVentasAgrupadas();
+  const v = lista.find(fact => String(fact.id).trim() === String(idFactura).trim());
+  if (!v) {
+    mostrarToast("Factura no encontrada.", "error");
+    return;
+  }
+
+  const negocio = state.config.nombreNegocio || "DC EL DESTAPE LICORES";
+  const telefono = state.config.telefonoNegocio || "+506 8992-7936";
+  const fecha = v.fecha ? new Date(v.fecha).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : new Date().toLocaleString();
+  const vendedor = v.facturadoPor || v.vendedor || "Carlos";
+
+  let texto = `🍷 *${negocio.toUpperCase()}* 🍷\n`;
+  texto += `📱 *Tel:* ${telefono}\n`;
+  texto += `--------------------------------\n`;
+  texto += `🧾 *COMPROBANTE DE COMPRA*\n`;
+  texto += `📅 Fecha: ${fecha}\n`;
+  texto += `🎫 N°: ${v.id}\n`;
+  texto += `👤 Facturado por: ${vendedor}\n`;
+  if (v.pedidoOrigenId) {
+    texto += `📋 Pedido preventa: ${v.pedidoOrigenId}\n`;
+    if (v.pedidoOrigenVendedor) texto += `🙋 Tomó pedido: ${v.pedidoOrigenVendedor}\n`;
+  }
+  texto += `👤 Cliente: ${v.cliente || "General"}\n`;
+  texto += `--------------------------------\n`;
+
+  (v.items || []).forEach(i => {
+    const cant = parseNum(i.cantidad, 1);
+    const subCRC = parseNum(i.subtotalCRC, cant * parseNum(i.precioVentaCRC || i.precioCRC, 0));
+    const subUSD = parseNum(i.subtotalUSD, cant * parseNum(i.precioVentaUSD || i.precioUSD, 0));
+    texto += `• ${cant}x ${i.nombre} = ${fmtCRC(subCRC)} (${fmtUSD(subUSD)})\n`;
+  });
+
+  if (v.descuentoPuntos && v.descuentoPuntos > 0) {
+    texto += `🎁 *Descuento Puntos:* -${fmtCRC(v.descuentoPuntos)}\n`;
+  }
+
+  // Trazabilidad de puntos si el cliente está registrado
+  const cliEncontrado = (v.clienteId && state.clientes && state.clientes[v.clienteId]) 
+    ? state.clientes[v.clienteId] 
+    : Object.values(state.clientes || {}).find(c => String(c.nombre || "").trim().toLowerCase() === String(v.cliente || "").trim().toLowerCase());
+
+  if (cliEncontrado && String(v.cliente || "").toLowerCase() !== "cliente general") {
+    const gan = Number(v.puntosGanados) || 0;
+    const canj = Number(v.puntosCanjados) || 0;
+    const saldo = Number(cliEncontrado.puntos) || 0;
+    texto += `🎁 *PUNTOS DE FIDELIDAD:*\n`;
+    if (gan > 0) texto += `En esta compra acumulaste: *${gan.toLocaleString()} puntos*\n`;
+    texto += `Saldo actual: *${saldo.toLocaleString()} puntos*\n`;
+    texto += `💡 *Recuerda que al tener 4500 puntos acumulados puedes redimirlos.*\n`;
+  }
+
+  texto += `--------------------------------\n`;
+  texto += `💳 *Método de Pago:* ${v.metodoPago || "Efectivo"}\n`;
+  texto += `💵 *TOTAL CRC:* ${fmtCRC(v.totalFinalCRC !== undefined ? v.totalFinalCRC : v.totalCRC)}\n`;
+  texto += `💵 *TOTAL USD:* ${fmtUSD(v.totalUSD)}\n\n`;
+  texto += `¡Muchas gracias por su preferencia! 🍷\n\n`;
+  texto += `📱 *Redes sociales:*\n`;
+  texto += `📷 Instagram:\nhttps://www.instagram.com/dceldestape\n\n`;
+  texto += `🔵 Facebook:\nhttps://www.facebook.com/share/1CHT3FRSc6/`;
+
+  // Resolver teléfono de destino
+  let telDestino = "";
+  if (v.clienteTelefono) {
+    telDestino = String(v.clienteTelefono).replace(/\D/g, "").replace(/^506/, "");
+  } else if (cliEncontrado && cliEncontrado.telefono) {
+    telDestino = String(cliEncontrado.telefono).replace(/\D/g, "").replace(/^506/, "");
+  } else if (v.pedidoOrigenId) {
+    const ped = (state.pedidos || []).find(p => p.id === v.pedidoOrigenId);
+    if (ped && ped.clienteTelefono) {
+      telDestino = String(ped.clienteTelefono).replace(/\D/g, "").replace(/^506/, "");
+    }
+  }
+
+  const encoded = encodeURIComponent(texto);
+  const waUrl = telDestino
+    ? `https://wa.me/506${telDestino}?text=${encoded}`
+    : `https://wa.me/?text=${encoded}`;
+
+  window.open(waUrl, "_blank");
+}
+
+function verReciboFacturaGenerada(idFactura) {
+  const lista = obtenerListaVentasAgrupadas();
+  const v = lista.find(fact => String(fact.id).trim() === String(idFactura).trim());
+  if (!v) {
+    mostrarToast("Factura no encontrada.", "error");
+    return;
+  }
+  state.ultimaVentaCompletada = v;
+  abrirModalRecibo(v, false);
+}
+
+function descargarTicketFacturaGenerada(idFactura) {
+  const lista = obtenerListaVentasAgrupadas();
+  const v = lista.find(fact => String(fact.id).trim() === String(idFactura).trim());
+  if (!v) {
+    mostrarToast("Factura no encontrada.", "error");
+    return;
+  }
+
+  const negocio = state.config.nombreNegocio || "DC EL DESTAPE LICORES";
+  const telefono = state.config.telefonoNegocio || "+506 8992-7936";
+  const fecha = v.fecha ? new Date(v.fecha).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : new Date().toLocaleString();
+  const vendedor = v.facturadoPor || v.vendedor || "Carlos";
+
+  let lines = [
+    "==========================================",
+    `        ${negocio.toUpperCase()}`,
+    `         Tel: ${telefono}`,
+    "==========================================",
+    `COMPROBANTE / FACTURA: ${v.id}`,
+    `Fecha: ${fecha}`,
+    `Facturado por: ${vendedor}`,
+    v.pedidoOrigenId ? `Pedido preventa: ${v.pedidoOrigenId}` : "",
+    v.pedidoOrigenVendedor ? `Tomó pedido: ${v.pedidoOrigenVendedor}` : "",
+    `Cliente: ${v.cliente || "Cliente General"}`,
+    "------------------------------------------",
+    "CANT  PRODUCTO                    TOTAL",
+    "------------------------------------------"
+  ].filter(Boolean);
+
+  (v.items || []).forEach(i => {
+    const cant = `${i.cantidad}x`.padEnd(5);
+    const nom = (i.nombre || i.codigo || "").slice(0, 22).padEnd(23);
+    const sub = fmtCRC(i.subtotalCRC || (i.cantidad * (i.precioVentaCRC || i.precioCRC || 0)));
+    lines.push(`${cant} ${nom} ${sub}`);
+  });
+
+  lines.push("------------------------------------------");
+  if (v.descuentoPuntos && v.descuentoPuntos > 0) {
+    lines.push(`Descuento Puntos: -${fmtCRC(v.descuentoPuntos)}`);
+  }
+  lines.push(`Método de Pago: ${v.metodoPago || "Efectivo"}`);
+  lines.push(`TOTAL CRC: ${fmtCRC(v.totalFinalCRC !== undefined ? v.totalFinalCRC : v.totalCRC)}`);
+  lines.push(`TOTAL USD: ${fmtUSD(v.totalUSD)}`);
+  lines.push("==========================================");
+  lines.push("       ¡Gracias por su preferencia!");
+  lines.push("==========================================");
+
+  const textContent = lines.join("\r\n");
+  const blob = new Blob([textContent], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `Comprobante_${v.id}.txt`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  mostrarToast(`Comprobante ${v.id} descargado.`, "success");
+}
+
+// ==========================================================================
+// MÓDULO APARTADOS Y GESTIÓN DE ABONOS
+// ==========================================================================
+function renderizarModuloApartados() {
+  const cont = document.getElementById("apartadosListContainer");
+  const countActivosBadge = document.getElementById("apartadosActivosCount");
+  const saldoPendienteBadge = document.getElementById("apartadosSaldoPendienteCRC");
+  const totalAbonadoBadge = document.getElementById("apartadosTotalAbonadoCRC");
+  if (!cont) return;
+
+  const lista = state.apartados || [];
+  const q = String(state.busquedaApartados || "").trim().toLowerCase();
+  const filtroEstado = String(state.filtroEstadoApartados || "activos").trim().toLowerCase();
+
+  // 1. Métricas globales
+  let activosCount = 0;
+  let saldoPendienteActivosCRC = 0;
+  let totalAbonadoGlobalCRC = 0;
+
+  lista.forEach(a => {
+    const est = String(a.estado || "Activo").trim();
+    const sal = parseNum(a.saldoPendienteCRC, 0);
+    const abo = parseNum(a.totalAbonadoCRC, 0);
+    totalAbonadoGlobalCRC += abo;
+
+    if (est === "Activo") {
+      activosCount++;
+      saldoPendienteActivosCRC += sal;
+    }
+  });
+
+  if (countActivosBadge) countActivosBadge.textContent = activosCount;
+  if (saldoPendienteBadge) saldoPendienteBadge.textContent = fmtCRC(saldoPendienteActivosCRC);
+  if (totalAbonadoBadge) totalAbonadoBadge.textContent = fmtCRC(totalAbonadoGlobalCRC);
+
+  // 2. Actualizar botones de filtro
+  ["activos", "liquidados", "entregados", "todos"].forEach(f => {
+    const btn = document.getElementById("filtroAptEstado-" + f);
+    if (btn) {
+      if (f === filtroEstado) {
+        btn.className = "px-3 py-1 rounded-xl font-bold text-xs bg-blue-600 text-white transition-all active:scale-95 shrink-0 shadow-sm";
+      } else {
+        btn.className = "px-3 py-1 rounded-xl font-bold text-xs bg-slate-800 text-slate-300 hover:text-white transition-all active:scale-95 shrink-0";
+      }
+    }
+  });
+
+  // 3. Filtrar según estado y búsqueda
+  let filtrados = lista.filter(a => {
+    const est = String(a.estado || "Activo").trim().toLowerCase();
+
+    if (filtroEstado === "activos" && est !== "activo") return false;
+    if (filtroEstado === "liquidados" && est !== "liquidado") return false;
+    if (filtroEstado === "entregados" && est !== "entregado") return false;
+
+    if (q) {
+      const matchId = String(a.id || "").toLowerCase().includes(q);
+      const matchCli = String(a.cliente || "").toLowerCase().includes(q);
+      const matchTel = String(a.clienteTelefono || "").toLowerCase().includes(q);
+      const matchVend = String(a.vendedor || "").toLowerCase().includes(q);
+      const matchNotas = String(a.notas || "").toLowerCase().includes(q);
+      const matchItems = (a.items || []).some(i => 
+        String(i.nombre || "").toLowerCase().includes(q) || 
+        String(i.codigo || "").toLowerCase().includes(q)
+      );
+      if (!matchId && !matchCli && !matchTel && !matchVend && !matchNotas && !matchItems) return false;
+    }
+
+    return true;
+  });
+
+  if (filtrados.length === 0) {
+    cont.innerHTML = `
+      <div class="text-center py-10 text-slate-500 bg-slate-900/60 rounded-3xl border border-slate-800 space-y-2.5">
+        <div class="w-12 h-12 mx-auto rounded-2xl bg-slate-800 flex items-center justify-center text-slate-500">
+          <i data-lucide="bookmark-x" class="w-6 h-6 stroke-1"></i>
+        </div>
+        <p class="text-xs font-bold text-slate-300">${q ? "No se encontraron apartados con ese criterio." : "No hay apartados en esta sección."}</p>
+        <p class="text-[11px] text-slate-500 max-w-xs mx-auto">Puedes registrar un nuevo apartado desde el Punto de Venta seleccionando la opción 'Apartado'.</p>
+        <div class="pt-1">
+          <button onclick="cambiarModoPOS('apartado'); cambiarVista('ventas');" class="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-xs inline-flex items-center gap-1.5 active:scale-95 transition-all shadow-md">
+            <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+            <span>Crear Nuevo Apartado</span>
+          </button>
+        </div>
+      </div>
+    `;
+    inicializarIconos();
+    return;
+  }
+
+  cont.innerHTML = filtrados.map(a => {
+    const est = String(a.estado || "Activo").trim();
+    const fStr = a.fecha ? new Date(a.fecha).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : "S/F";
+    const totalCRC = parseNum(a.montoTotalCRC, 0);
+    const totalUSD = parseNum(a.montoTotalUSD, 0);
+    const abonadoCRC = parseNum(a.totalAbonadoCRC, 0);
+    const saldoCRC = parseNum(a.saldoPendienteCRC, 0);
+    const items = a.items || [];
+    const abonos = a.abonos || [];
+
+    let badgeEstado = "bg-blue-950/80 text-blue-300 border-blue-500/40";
+    let iconEstado = "clock";
+    let labelEstado = "Activo (En Proceso)";
+
+    if (est === "Liquidado") {
+      badgeEstado = "bg-emerald-950/80 text-emerald-300 border-emerald-500/40";
+      iconEstado = "check-circle";
+      labelEstado = "Liquidado (₡0 - Listo)";
+    } else if (est === "Entregado") {
+      badgeEstado = "bg-purple-950/80 text-purple-300 border-purple-500/40";
+      iconEstado = "package-check";
+      labelEstado = "Entregado al Cliente";
+    } else if (est === "Cancelado") {
+      badgeEstado = "bg-rose-950/80 text-rose-300 border-rose-500/40";
+      iconEstado = "x-circle";
+      labelEstado = "Cancelado";
+    }
+
+    // Progreso de pago
+    const pct = totalCRC > 0 ? Math.min(100, Math.round((abonadoCRC / totalCRC) * 100)) : 100;
+
+    return `
+      <div class="bg-slate-900/90 border border-slate-800 rounded-3xl p-4 shadow-xl space-y-3 transition-all hover:border-slate-700">
+        <!-- Encabezado de la tarjeta -->
+        <div class="flex items-start justify-between gap-2 border-b border-slate-800 pb-2.5">
+          <div>
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="font-mono font-black text-white text-sm tracking-wide">${a.id}</span>
+              <span class="px-2 py-0.5 rounded-full border text-[10px] font-bold uppercase flex items-center gap-1 ${badgeEstado}">
+                <i data-lucide="${iconEstado}" class="w-3 h-3"></i>
+                <span>${labelEstado}</span>
+              </span>
+            </div>
+            <div class="text-[11px] text-slate-400 font-sans mt-0.5 flex items-center gap-1.5 flex-wrap">
+              <span>📅 ${fStr}</span>
+              <span>•</span>
+              <span>👤 Vend: <b class="text-slate-300">${a.vendedor || "Carlos"}</b></span>
+              ${a.fechaVencimiento ? `<span>•</span><span class="text-amber-300 font-medium">⏳ Límite: ${a.fechaVencimiento}</span>` : ''}
+            </div>
+          </div>
+          <div class="text-right font-mono shrink-0">
+            <span class="text-xs text-slate-400 block font-sans">Total</span>
+            <span class="text-base font-black text-white">${fmtCRC(totalCRC)}</span>
+          </div>
+        </div>
+
+        <!-- Información del Cliente -->
+        <div class="p-2.5 bg-slate-950/80 rounded-2xl border border-slate-800/80 flex items-center justify-between text-xs">
+          <div class="flex items-center gap-2">
+            <div class="p-1.5 rounded-xl bg-blue-500/20 text-blue-400">
+              <i data-lucide="user" class="w-4 h-4"></i>
+            </div>
+            <div>
+              <span class="font-bold text-white block leading-tight">${a.cliente || "Cliente General"}</span>
+              ${a.clienteTelefono ? `<span class="text-[10px] text-slate-400 font-mono">📱 ${a.clienteTelefono}</span>` : '<span class="text-[10px] text-slate-500">Sin teléfono</span>'}
+            </div>
+          </div>
+          ${a.clienteTelefono ? `
+            <a href="https://wa.me/506${String(a.clienteTelefono).replace(/\D/g, '').replace(/^506/, '')}" target="_blank"
+              class="px-2 py-1 bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-500/30 text-emerald-300 rounded-xl font-bold text-[10px] flex items-center gap-1 transition-all">
+              <i data-lucide="message-circle" class="w-3 h-3"></i>
+              <span>Chat</span>
+            </a>
+          ` : ''}
+        </div>
+
+        <!-- Lista de Productos Apartados -->
+        <div class="space-y-1.5">
+          <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider block">Productos Apartados (${items.length}):</span>
+          <div class="space-y-1 max-h-36 overflow-y-auto pr-1">
+            ${items.map(it => {
+              const invTag = it.inventarioVendedor ? `
+                <span class="text-[9px] font-bold px-1.5 py-0.2 rounded border ${it.inventarioVendedor === 'Daniel' ? 'text-violet-300 bg-violet-950/80 border-violet-500/40' : 'text-blue-300 bg-blue-950/80 border-blue-500/40'}">
+                  Stock ${it.inventarioVendedor}
+                </span>
+              ` : '';
+              return `
+                <div class="p-2 bg-slate-950/60 rounded-xl border border-slate-800/60 flex items-center justify-between text-xs font-mono">
+                  <div class="flex items-center gap-2 min-w-0 flex-1 font-sans">
+                    <span class="font-black text-amber-400 shrink-0">${it.cantidad}x</span>
+                    <span class="text-white truncate">${it.nombre || it.codigo}</span>
+                    ${invTag}
+                  </div>
+                  <span class="font-bold text-slate-300 font-mono text-[11px] shrink-0 ml-2">
+                    ${fmtCRC(it.subtotalCRC || (it.cantidad * (it.precioVentaCRC || 0)))}
+                  </span>
+                </div>
+              `;
+            }).join("")}
+          </div>
+        </div>
+
+        <!-- Barra de Progreso y Saldos -->
+        <div class="p-3 bg-slate-950/90 rounded-2xl border border-slate-800 space-y-2">
+          <div class="flex items-center justify-between text-xs font-mono">
+            <div>
+              <span class="text-[10px] text-slate-400 font-sans block">Abonado (${pct}%)</span>
+              <span class="font-bold text-emerald-400">${fmtCRC(abonadoCRC)}</span>
+            </div>
+            <div class="text-right">
+              <span class="text-[10px] text-slate-400 font-sans block">Saldo Pendiente</span>
+              <span class="font-black ${saldoCRC <= 0 ? 'text-emerald-400' : 'text-amber-400'}">${fmtCRC(saldoCRC)}</span>
+            </div>
+          </div>
+          <!-- Barra gráfica -->
+          <div class="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+            <div class="h-full bg-gradient-to-r ${saldoCRC <= 0 ? 'from-emerald-500 to-teal-400' : 'from-blue-500 to-indigo-500'} transition-all duration-500" style="width: ${pct}%"></div>
+          </div>
+        </div>
+
+        <!-- Historial de Abonos (si tiene) -->
+        ${abonos && abonos.length > 0 ? `
+          <div class="p-2.5 bg-slate-950/60 rounded-2xl border border-slate-800/60 space-y-1.5">
+            <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider block">Historial de Abonos (${abonos.length}):</span>
+            <div class="space-y-1 text-[11px] max-h-28 overflow-y-auto pr-1">
+              ${abonos.map(ab => `
+                <div class="flex items-center justify-between p-1.5 bg-slate-900 rounded-lg text-slate-300 font-mono">
+                  <div class="font-sans flex items-center gap-1.5">
+                    <i data-lucide="check" class="w-3 h-3 text-emerald-400 shrink-0"></i>
+                    <span>${ab.fecha ? ab.fecha.slice(0, 16) : ''} (${ab.recibidoPor || 'Carlos'})</span>
+                    <span class="text-[10px] text-slate-500 font-mono">[${ab.metodoPago || 'Efectivo'}]</span>
+                  </div>
+                  <span class="font-bold text-emerald-400 font-mono">+${fmtCRC(ab.montoCRC || 0)}</span>
+                </div>
+              `).join("")}
+            </div>
+          </div>
+        ` : ''}
+
+        ${a.notas ? `<p class="text-[10.5px] text-slate-400 italic bg-slate-950/40 p-2 rounded-xl border border-slate-800/40">📝 ${a.notas}</p>` : ''}
+
+        <!-- Botones de Acción -->
+        <div class="pt-1 flex items-center justify-end gap-2 flex-wrap">
+          <!-- WhatsApp Reenviar / Compartir -->
+          <button onclick="compartirApartadoWhatsApp('${a.id}')" title="Enviar estado por WhatsApp"
+            class="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl active:scale-95 transition-all flex items-center gap-1.5 shadow-md shadow-emerald-600/30 text-xs">
+            <i data-lucide="message-circle" class="w-3.5 h-3.5"></i>
+            <span>WhatsApp</span>
+          </button>
+
+          <!-- Descargar Ticket -->
+          <button onclick="imprimirTicketApartado('${a.id}')" title="Descargar comprobante en texto"
+            class="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl active:scale-95 transition-all flex items-center gap-1 text-xs">
+            <i data-lucide="file-text" class="w-3.5 h-3.5"></i>
+            <span>Ticket</span>
+          </button>
+
+          <!-- Botón de Abono (si está Activo y con saldo > 0) -->
+          ${est === "Activo" && saldoCRC > 0 ? `
+            <button onclick="abrirModalAbonoApartado('${a.id}')"
+              class="px-3 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black rounded-xl active:scale-95 transition-all flex items-center gap-1.5 shadow-md shadow-blue-500/25 text-xs">
+              <i data-lucide="hand-coins" class="w-3.5 h-3.5"></i>
+              <span>+ Abonar</span>
+            </button>
+          ` : ''}
+
+          <!-- Botón Entregar (si está Liquidado o si el comerciante decide entregar) -->
+          ${est === "Liquidado" || (est === "Activo" && saldoCRC <= 0) ? `
+            <button onclick="entregarApartadoConfirmar('${a.id}')"
+              class="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black rounded-xl active:scale-95 transition-all flex items-center gap-1.5 shadow-md shadow-emerald-500/25 text-xs">
+              <i data-lucide="package-check" class="w-3.5 h-3.5"></i>
+              <span>Entregar</span>
+            </button>
+          ` : ''}
+
+          <!-- Cancelar Apartado (solo si no está Entregado ni Cancelado) -->
+          ${est !== "Entregado" && est !== "Cancelado" ? `
+            <button onclick="cancelarApartadoConfirmar('${a.id}')" title="Cancelar apartado y liberar stock"
+              class="px-2.5 py-1.5 bg-rose-950/60 hover:bg-rose-900 border border-rose-500/30 text-rose-300 font-bold rounded-xl active:scale-95 transition-all flex items-center gap-1 text-xs">
+              <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+              <span>Cancelar</span>
+            </button>
+          ` : ''}
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  inicializarIconos();
+}
+
+function filtrarApartadosUI() {
+  const input = document.getElementById("searchApartadosInput");
+  state.busquedaApartados = input ? input.value : "";
+  renderizarModuloApartados();
+}
+
+function cambiarFiltroEstadoApartados(estado) {
+  state.filtroEstadoApartados = estado || "activos";
+  renderizarModuloApartados();
+}
+
+function abrirModalAbonoApartado(idApartado) {
+  const a = (state.apartados || []).find(it => String(it.id).trim() === String(idApartado).trim());
+  if (!a) {
+    mostrarToast("Apartado no encontrado.", "error");
+    return;
+  }
+
+  const modal = document.getElementById("modalRegistrarAbonoApartado");
+  const subEl = document.getElementById("modalAbonoApartadoSubtitulo");
+  const idEl = document.getElementById("modalAbonoIdApartado");
+  const totalEl = document.getElementById("modalAbonoTotalCRC");
+  const saldoEl = document.getElementById("modalAbonoSaldoCRC");
+  const montoInput = document.getElementById("inputMontoAbonoCRC");
+  const cobradoPorSel = document.getElementById("selectCobradoPorAbono");
+  const notasInput = document.getElementById("inputNotasAbono");
+
+  if (idEl) idEl.value = a.id;
+  if (subEl) subEl.textContent = `${a.id} • ${a.cliente || 'Cliente General'}`;
+  if (totalEl) totalEl.textContent = fmtCRC(a.montoTotalCRC);
+  if (saldoEl) saldoEl.textContent = fmtCRC(a.saldoPendienteCRC);
+  if (montoInput) {
+    montoInput.value = "";
+    montoInput.max = a.saldoPendienteCRC;
+    montoInput.placeholder = `Hasta ${fmtCRC(a.saldoPendienteCRC)}`;
+  }
+  if (cobradoPorSel) cobradoPorSel.value = state.vendedorActual || "Carlos";
+  if (notasInput) notasInput.value = "";
+
+  if (modal) {
+    modal.classList.remove("hidden");
+    modal.classList.add("flex");
+  }
+  inicializarIconos();
+  if (montoInput) setTimeout(() => montoInput.focus(), 150);
+}
+
+function cerrarModalAbonoApartado() {
+  const modal = document.getElementById("modalRegistrarAbonoApartado");
+  if (modal) {
+    modal.classList.add("hidden");
+    modal.classList.remove("flex");
+  }
+}
+
+function guardarNuevoAbonoApartado() {
+  const idApartado = document.getElementById("modalAbonoIdApartado")?.value;
+  const a = (state.apartados || []).find(it => String(it.id).trim() === String(idApartado).trim());
+  if (!a) {
+    mostrarToast("Apartado no encontrado.", "error");
+    return;
+  }
+
+  const montoInput = document.getElementById("inputMontoAbonoCRC");
+  const montoCRC = Math.max(0, Number(montoInput ? montoInput.value : 0) || 0);
+
+  if (montoCRC <= 0) {
+    mostrarToast("Ingresa un monto válido mayor a 0.", "error");
+    return;
+  }
+
+  if (montoCRC > Number(a.saldoPendienteCRC)) {
+    mostrarToast(`El monto no puede superar el saldo pendiente (${fmtCRC(a.saldoPendienteCRC)}).`, "error");
+    return;
+  }
+
+  const tc = Number(state.config.tipoCambio) || 500;
+  const montoUSD = montoCRC / tc;
+  const metodoPago = document.getElementById("selectMetodoPagoAbono")?.value || "Efectivo";
+  const recibidoPor = document.getElementById("selectCobradoPorAbono")?.value || (state.vendedorActual || "Carlos");
+  const notas = document.getElementById("inputNotasAbono")?.value?.trim() || "";
+
+  const idAbono = "ABO-" + Date.now().toString().slice(-6);
+  const fechaISO = new Date().toISOString();
+
+  // Actualizar apartado en memoria
+  a.totalAbonadoCRC = (parseNum(a.totalAbonadoCRC, 0)) + montoCRC;
+  a.totalAbonadoUSD = (parseNum(a.totalAbonadoUSD, 0)) + montoUSD;
+  a.saldoPendienteCRC = Math.max(0, (parseNum(a.montoTotalCRC, 0)) - a.totalAbonadoCRC);
+  a.saldoPendienteUSD = Math.max(0, (parseNum(a.montoTotalUSD, 0)) - a.totalAbonadoUSD);
+  if (a.saldoPendienteCRC <= 0) {
+    a.estado = "Liquidado";
+  }
+
+  const abonoObj = {
+    id: idAbono,
+    fecha: fechaISO,
+    idApartado: a.id,
+    cliente: a.cliente,
+    telefono: a.clienteTelefono || "",
+    montoCRC: montoCRC,
+    montoUSD: montoUSD,
+    metodoPago: metodoPago,
+    saldoRestanteCRC: a.saldoPendienteCRC,
+    saldoRestanteUSD: a.saldoPendienteUSD,
+    recibidoPor: recibidoPor,
+    notas: notas || "Abono a apartado"
+  };
+
+  if (!a.abonos) a.abonos = [];
+  a.abonos.push(abonoObj);
+
+  if (!state.abonosApartados) state.abonosApartados = [];
+  state.abonosApartados.unshift(abonoObj);
+
+  guardarApartadosLocal();
+
+  // Encolar acción para sincronizar con Google Sheets
+  encolarAccionSincronizacion("abonarApartado", {
+    idApartado: a.id,
+    abono: abonoObj
+  });
+
+  cerrarModalAbonoApartado();
+  renderizarTodo();
+
+  if (window.confetti) {
+    window.confetti({ particleCount: 50, spread: 45, origin: { y: 0.8 } });
+  }
+
+  mostrarToast(`✅ Abono de ${fmtCRC(montoCRC)} registrado para ${a.cliente}. Saldo restante: ${fmtCRC(a.saldoPendienteCRC)}`, "success");
+
+  // Compartir comprobante por WhatsApp
+  compartirApartadoWhatsApp(a.id);
+}
+
+function entregarApartadoConfirmar(idApartado) {
+  const a = (state.apartados || []).find(it => String(it.id).trim() === String(idApartado).trim());
+  if (!a) return;
+
+  if (Number(a.saldoPendienteCRC) > 0) {
+    if (!confirm(`⚠️ Este apartado aún tiene un saldo pendiente de ${fmtCRC(a.saldoPendienteCRC)}. ¿Deseas marcarlo como ENTREGADO de todos modos?`)) {
+      return;
+    }
+  } else {
+    if (!confirm(`¿Confirmar entrega de las botellas del apartado ${a.id} a ${a.cliente}?`)) {
+      return;
+    }
+  }
+
+  a.estado = "Entregado";
+  a.fechaEntrega = new Date().toISOString();
+  guardarApartadosLocal();
+
+  encolarAccionSincronizacion("entregarApartado", {
+    idApartado: a.id,
+    entregadoPor: state.vendedorActual || "Carlos"
+  });
+
+  renderizarTodo();
+  mostrarToast(`📦 Apartado ${a.id} marcado como ENTREGADO con éxito.`, "success");
+}
+
+function cancelarApartadoConfirmar(idApartado) {
+  const a = (state.apartados || []).find(it => String(it.id).trim() === String(idApartado).trim());
+  if (!a) return;
+
+  const motivo = prompt(`¿Motivo de la cancelación del apartado ${a.id} (${a.cliente})?\n\nAl cancelar, las botellas reservadas volverán a estar disponibles en inventario:`);
+  if (motivo === null) return; // Usuario canceló el prompt
+
+  a.estado = "Cancelado";
+  a.notas = `${a.notas ? a.notas + ' ' : ''}[CANCELADO: ${motivo.trim() || 'Sin motivo especificado'}]`;
+  guardarApartadosLocal();
+
+  encolarAccionSincronizacion("cancelarApartado", {
+    idApartado: a.id,
+    motivo: motivo.trim() || "Cancelado por el usuario",
+    canceladoPor: state.vendedorActual || "Carlos"
+  });
+
+  renderizarTodo();
+  mostrarToast(`↩ Apartado ${a.id} cancelado. Botellas liberadas al inventario disponible.`, "info");
+}
+
+function compartirApartadoWhatsApp(idApartado) {
+  const a = (state.apartados || []).find(it => String(it.id).trim() === String(idApartado).trim());
+  if (!a) {
+    mostrarToast("Apartado no encontrado.", "error");
+    return;
+  }
+
+  const negocio = state.config.nombreNegocio || "DC EL DESTAPE LICORES";
+  const telefonoNegocio = state.config.telefonoNegocio || "+506 8992-7936";
+  const fecha = a.fecha ? new Date(a.fecha).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : new Date().toLocaleString();
+
+  let texto = `🍷 *${negocio.toUpperCase()}* 🍷\n`;
+  texto += `📱 *Tel:* ${telefonoNegocio}\n`;
+  texto += `--------------------------------\n`;
+  texto += `🔖 *COMPROBANTE DE APARTADO*\n`;
+  texto += `📅 Fecha: ${fecha}\n`;
+  texto += `🎫 N° Apartado: *${a.id}*\n`;
+  texto += `👤 Cliente: *${a.cliente || "Cliente General"}*\n`;
+  texto += `👤 Atendido por: ${a.vendedor || "Carlos"}\n`;
+  if (a.fechaVencimiento) {
+    texto += `⏳ Fecha límite de retiro: *${a.fechaVencimiento}*\n`;
+  }
+  texto += `--------------------------------\n`;
+  texto += `📦 *PRODUCTOS RESERVADOS:*\n`;
+
+  (a.items || []).forEach(i => {
+    const cant = parseNum(i.cantidad, 1);
+    const subCRC = parseNum(i.subtotalCRC, cant * parseNum(i.precioVentaCRC, 0));
+    texto += `• ${cant}x ${i.nombre || i.codigo} = ${fmtCRC(subCRC)}\n`;
+  });
+
+  texto += `--------------------------------\n`;
+  texto += `💵 *Total Apartado:* ${fmtCRC(a.montoTotalCRC)}\n`;
+  texto += `💰 *Total Abonado:* ${fmtCRC(a.totalAbonadoCRC)}\n`;
+  texto += `⚠️ *SALDO PENDIENTE:* *${fmtCRC(a.saldoPendienteCRC)}*\n`;
+  
+  const est = String(a.estado || "Activo").trim();
+  if (est === "Liquidado" || parseNum(a.saldoPendienteCRC, 0) <= 0) {
+    texto += `\n🎉 *¡APARTADO LIQUIDADO AL 100%!* Listo para retiro/entrega. ✅\n`;
+  } else {
+    texto += `\n🔒 _Mercadería reservada y apartada exclusivamente para usted._\n`;
+  }
+
+  if (a.abonos && a.abonos.length > 0) {
+    texto += `\n📋 *Últimos abonos registrados:*\n`;
+    a.abonos.slice(-3).forEach(ab => {
+      texto += `  - ${ab.fecha ? ab.fecha.slice(0, 10) : ''}: +${fmtCRC(ab.montoCRC || 0)} (${ab.metodoPago || 'Efectivo'})\n`;
+    });
+  }
+
+  texto += `\n¡Muchas gracias por su preferencia! 🍷\n\n`;
+  texto += `📱 *Redes sociales:*\n`;
+  texto += `📷 Instagram: https://www.instagram.com/dceldestape\n`;
+  texto += `🔵 Facebook: https://www.facebook.com/share/1CHT3FRSc6/`;
+
+  let telDestino = "";
+  if (a.clienteTelefono) {
+    telDestino = String(a.clienteTelefono).replace(/\D/g, "").replace(/^506/, "");
+  }
+
+  const encoded = encodeURIComponent(texto);
+  const waUrl = telDestino
+    ? `https://wa.me/506${telDestino}?text=${encoded}`
+    : `https://wa.me/?text=${encoded}`;
+
+  window.open(waUrl, "_blank");
+}
+
+function imprimirTicketApartado(idApartado) {
+  const a = (state.apartados || []).find(it => String(it.id).trim() === String(idApartado).trim());
+  if (!a) {
+    mostrarToast("Apartado no encontrado.", "error");
+    return;
+  }
+
+  const negocio = state.config.nombreNegocio || "DC EL DESTAPE LICORES";
+  const telefono = state.config.telefonoNegocio || "+506 8992-7936";
+  const fecha = a.fecha ? new Date(a.fecha).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : new Date().toLocaleString();
+
+  let lines = [
+    "==========================================",
+    `        ${negocio.toUpperCase()}`,
+    `         Tel: ${telefono}`,
+    "==========================================",
+    `COMPROBANTE DE APARTADO: ${a.id}`,
+    `Fecha: ${fecha}`,
+    `Atendido por: ${a.vendedor || "Carlos"}`,
+    `Cliente: ${a.cliente || "Cliente General"}`,
+    a.clienteTelefono ? `Teléfono: ${a.clienteTelefono}` : "",
+    a.fechaVencimiento ? `Fecha límite: ${a.fechaVencimiento}` : "",
+    "------------------------------------------",
+    "CANT  PRODUCTO                    TOTAL",
+    "------------------------------------------"
+  ].filter(Boolean);
+
+  (a.items || []).forEach(i => {
+    const cant = `${i.cantidad}x`.padEnd(5);
+    const nom = (i.nombre || i.codigo || "").slice(0, 22).padEnd(23);
+    const sub = fmtCRC(i.subtotalCRC || (i.cantidad * (i.precioVentaCRC || 0)));
+    lines.push(`${cant} ${nom} ${sub}`);
+  });
+
+  lines.push("------------------------------------------");
+  lines.push(`TOTAL APARTADO:   ${fmtCRC(a.montoTotalCRC)}`);
+  lines.push(`TOTAL ABONADO:    ${fmtCRC(a.totalAbonadoCRC)}`);
+  lines.push(`SALDO PENDIENTE:  ${fmtCRC(a.saldoPendienteCRC)}`);
+  lines.push(`ESTADO:           ${a.estado || "Activo"}`);
+  lines.push("==========================================");
+  lines.push("   ¡Mercadería reservada con éxito!");
+  lines.push("==========================================");
+
+  const textContent = lines.join("\r\n");
+  const blob = new Blob([textContent], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `Apartado_${a.id}.txt`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+  mostrarToast(`Ticket de apartado ${a.id} descargado.`, "success");
+}
+

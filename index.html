@@ -599,9 +599,17 @@
           <i data-lucide="search" class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"></i>
           <input type="text" id="searchPos" oninput="filtrarPosProductos()" placeholder="Agregar licor a la venta..." class="w-full pl-10 pr-4 py-2.5 bg-slate-800 border border-slate-700 rounded-2xl text-sm text-white placeholder-slate-400 focus:outline-none focus:border-indigo-500">
         </div>
-        <button onclick="abrirEscaner('venta')" class="px-3.5 py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-2xl shadow-lg shadow-indigo-600/30 font-bold text-xs flex items-center gap-1.5 active:scale-95 transition-all">
-          <i data-lucide="scan-barcode" class="w-5 h-5"></i>
+        <button onclick="abrirEscaner('venta')" class="px-3 py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-2xl shadow-lg shadow-indigo-600/30 font-bold text-xs flex items-center gap-1.5 active:scale-95 transition-all">
+          <i data-lucide="scan-barcode" class="w-4 h-4"></i>
           <span>Escanear</span>
+        </button>
+        <button onclick="cambiarVista('facturas')" title="Ver Facturas Generadas" class="px-2.5 py-2.5 bg-emerald-950/80 border border-emerald-500/40 hover:bg-emerald-900 text-emerald-300 rounded-2xl font-bold text-xs flex items-center gap-1 active:scale-95 transition-all shadow-md">
+          <i data-lucide="receipt" class="w-4 h-4"></i>
+          <span class="hidden sm:inline">Facturas</span>
+        </button>
+        <button onclick="cambiarVista('apartados')" title="Ver Apartados y Abonos" class="px-2.5 py-2.5 bg-blue-950/80 border border-blue-500/40 hover:bg-blue-900 text-blue-300 rounded-2xl font-bold text-xs flex items-center gap-1 active:scale-95 transition-all shadow-md">
+          <i data-lucide="bookmark" class="w-4 h-4"></i>
+          <span class="hidden sm:inline">Apartados</span>
         </button>
       </div>
 
@@ -620,15 +628,19 @@
 
       <!-- Sale Cart Card -->
       <div class="bg-slate-800/90 border border-slate-700/80 rounded-2xl p-3.5 space-y-3">
-        <!-- Modo POS Toggle: Venta Inmediata vs Pedido / Encargo -->
-        <div class="grid grid-cols-2 gap-1 bg-slate-950/80 p-1 rounded-xl border border-slate-700/60 text-xs font-bold font-mono">
-          <button type="button" id="btnModoVenta" onclick="cambiarModoPOS('venta')" class="py-2 rounded-lg bg-emerald-600 text-white shadow-md flex items-center justify-center gap-1.5 active:scale-95 transition-all">
+        <!-- Modo POS Toggle: Venta Directa vs Apartado vs Pedido / Encargo -->
+        <div class="grid grid-cols-3 gap-1 bg-slate-950/80 p-1 rounded-xl border border-slate-700/60 text-xs font-bold font-mono">
+          <button type="button" id="btnModoVenta" onclick="cambiarModoPOS('venta')" class="py-2 rounded-lg bg-emerald-600 text-white shadow-md flex items-center justify-center gap-1 active:scale-95 transition-all text-[11px]">
             <i data-lucide="shopping-bag" class="w-3.5 h-3.5"></i>
-            <span>Venta Directa</span>
+            <span>Venta</span>
           </button>
-          <button type="button" id="btnModoPedido" onclick="cambiarModoPOS('pedido')" class="py-2 rounded-lg bg-transparent text-slate-400 hover:text-white flex items-center justify-center gap-1.5 active:scale-95 transition-all">
+          <button type="button" id="btnModoApartado" onclick="cambiarModoPOS('apartado')" class="py-2 rounded-lg bg-transparent text-slate-400 hover:text-white flex items-center justify-center gap-1 active:scale-95 transition-all text-[11px]">
+            <i data-lucide="bookmark" class="w-3.5 h-3.5"></i>
+            <span>Apartado</span>
+          </button>
+          <button type="button" id="btnModoPedido" onclick="cambiarModoPOS('pedido')" class="py-2 rounded-lg bg-transparent text-slate-400 hover:text-white flex items-center justify-center gap-1 active:scale-95 transition-all text-[11px]">
             <i data-lucide="clipboard-list" class="w-3.5 h-3.5"></i>
-            <span>Encargo / Pedido</span>
+            <span>Pedido</span>
           </button>
         </div>
 
@@ -718,6 +730,64 @@
               <span>Total Botellas a Encargar:</span>
             </div>
             <span id="pedidoTotalUnidades" class="text-base font-black font-mono text-amber-400">0 unids</span>
+          </div>
+        </div>
+
+        <!-- Banner y Opciones de Modo Apartado (Solo visible en modo Apartado) -->
+        <div id="posBannerModoApartado" class="hidden pt-2 border-t border-blue-500/30 space-y-2.5">
+          <div class="bg-blue-950/40 border border-blue-500/40 rounded-2xl p-3 space-y-2.5">
+            <div class="flex items-center justify-between text-blue-300 text-xs font-bold border-b border-blue-500/20 pb-1.5">
+              <span class="flex items-center gap-1.5">
+                <i data-lucide="bookmark" class="w-4 h-4 text-blue-400"></i>
+                <span>Configuración de Apartado</span>
+              </span>
+              <span id="posApartadoResumenBotellas" class="text-[11px] font-mono text-blue-200">0 botellas</span>
+            </div>
+
+            <!-- Total del Apartado y Saldo Calculado -->
+            <div class="grid grid-cols-2 gap-2 text-xs">
+              <div class="p-2 bg-slate-900/90 rounded-xl border border-slate-700">
+                <span class="text-[10px] text-slate-400 block font-bold">TOTAL APARTADO:</span>
+                <span id="posApartadoTotalCRC" class="text-sm font-black text-white font-mono">₡0</span>
+              </div>
+              <div class="p-2 bg-slate-900/90 rounded-xl border border-slate-700">
+                <span class="text-[10px] text-slate-400 block font-bold">SALDO PENDIENTE:</span>
+                <span id="posApartadoSaldoCRC" class="text-sm font-black text-amber-400 font-mono">₡0</span>
+              </div>
+            </div>
+
+            <!-- Abono Inicial y Método -->
+            <div class="grid grid-cols-2 gap-2 text-xs">
+              <div>
+                <label for="posApartadoAbonoCRC" class="text-[11px] text-slate-300 font-semibold block mb-1">Abono Inicial (₡):</label>
+                <input type="number" id="posApartadoAbonoCRC" min="0" step="500" value="0" oninput="actualizarCalculoApartadoUI()" placeholder="₡0"
+                  class="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-700 rounded-lg text-white font-mono font-bold text-xs focus:border-blue-400">
+              </div>
+              <div>
+                <label for="posApartadoMetodoPago" class="text-[11px] text-slate-300 font-semibold block mb-1">Método de Pago:</label>
+                <select id="posApartadoMetodoPago" class="w-full px-2 py-1.5 bg-slate-950 border border-slate-700 rounded-lg text-white font-semibold text-xs focus:border-blue-400">
+                  <option value="Efectivo">💵 Efectivo</option>
+                  <option value="SINPE / Transf.">📱 SINPE</option>
+                  <option value="Tarjeta">💳 Tarjeta</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Fecha límite / Notas -->
+            <div class="grid grid-cols-2 gap-2 text-xs">
+              <div>
+                <label for="posApartadoFechaVenc" class="text-[10px] text-slate-400 block mb-0.5">Fecha límite retiro:</label>
+                <input type="date" id="posApartadoFechaVenc" class="w-full px-2 py-1 bg-slate-950 border border-slate-700 rounded-lg text-white text-[11px] focus:border-blue-400">
+              </div>
+              <div>
+                <label for="posApartadoNotas" class="text-[10px] text-slate-400 block mb-0.5">Notas / Referencia:</label>
+                <input type="text" id="posApartadoNotas" placeholder="Opcional..." class="w-full px-2 py-1 bg-slate-950 border border-slate-700 rounded-lg text-white text-[11px] focus:border-blue-400">
+              </div>
+            </div>
+
+            <p class="text-[10.5px] text-blue-300/80 leading-tight">
+              🔒 La mercadería queda reservada para este cliente y se descuenta del inventario disponible.
+            </p>
           </div>
         </div>
 
@@ -1556,12 +1626,237 @@
       <div style="height: 120px; width: 100%;" class="w-full block"></div>
     </section>
 
+    <!-- ============================================================== -->
+    <!-- VIEW: FACTURAS GENERADAS (HISTORIAL Y REENVÍO WHATSAPP)         -->
+    <!-- ============================================================== -->
+    <section id="viewFacturas" class="space-y-3.5 hidden">
+      <!-- Tarjeta Encabezado Principal -->
+      <div class="bg-gradient-to-r from-emerald-950/80 via-slate-900 to-slate-950 border border-emerald-500/40 rounded-3xl p-4 shadow-xl space-y-3">
+        <div class="flex items-center justify-between border-b border-emerald-500/20 pb-2.5">
+          <div class="flex items-center gap-2.5">
+            <div class="p-2.5 rounded-2xl bg-emerald-500/20 text-emerald-400">
+              <i data-lucide="receipt" class="w-6 h-6"></i>
+            </div>
+            <div>
+              <h2 class="text-base font-black text-white leading-tight">Facturas Generadas</h2>
+              <p class="text-[11px] text-emerald-300">Historial completo de ventas y reenvío por WhatsApp</p>
+            </div>
+          </div>
+          <button onclick="sincronizarConSheets(true)" title="Sincronizar y descargar facturas de Sheets" class="px-2.5 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1.5 shadow-sm">
+            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+            <span>Sincronizar</span>
+          </button>
+        </div>
+
+        <!-- Métricas Rápidas de Facturas -->
+        <div class="grid grid-cols-3 gap-2 text-center">
+          <div class="p-2 bg-slate-950/70 border border-slate-800 rounded-2xl">
+            <span class="text-[10px] text-slate-400 uppercase font-bold block">Facturas</span>
+            <span id="facturasTotalCount" class="text-sm font-black text-white font-mono">0</span>
+          </div>
+          <div class="p-2 bg-slate-950/70 border border-slate-800 rounded-2xl">
+            <span class="text-[10px] text-slate-400 uppercase font-bold block">Total CRC</span>
+            <span id="facturasTotalMontoCRC" class="text-xs font-black text-emerald-400 font-mono">₡0</span>
+          </div>
+          <div class="p-2 bg-slate-950/70 border border-slate-800 rounded-2xl">
+            <span class="text-[10px] text-slate-400 uppercase font-bold block">Total USD</span>
+            <span id="facturasTotalMontoUSD" class="text-xs font-bold text-slate-300 font-mono">$0</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Buscador y Filtros Rápidos -->
+      <div class="bg-slate-900 border border-slate-800 rounded-3xl p-3.5 shadow-xl space-y-3">
+        <!-- Campo de búsqueda -->
+        <div class="relative">
+          <i data-lucide="search" class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"></i>
+          <input type="text" id="searchFacturasInput" oninput="filtrarFacturasUI()" placeholder="Buscar por cliente, N° factura (VTA-...), licor o vendedor..."
+            class="w-full pl-10 pr-4 py-2.5 bg-slate-950 border border-slate-800 rounded-2xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-all shadow-inner">
+        </div>
+
+        <!-- Filtros Rápidos por Vendedor (Por defecto 'Todos' para ver todas las compras) -->
+        <div class="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+          <span class="text-[10px] text-slate-400 font-bold uppercase shrink-0 mr-1">Vendedor:</span>
+          <button type="button" id="filtroFacturaVend-todos" onclick="cambiarFiltroVendedorFacturas('todos')" class="px-3 py-1 rounded-xl font-bold text-xs bg-emerald-600 text-white transition-all active:scale-95 shrink-0 shadow-sm">
+            Todos
+          </button>
+          <button type="button" id="filtroFacturaVend-Carlos" onclick="cambiarFiltroVendedorFacturas('Carlos')" class="px-3 py-1 rounded-xl font-bold text-xs bg-slate-800 text-slate-300 hover:text-white transition-all active:scale-95 shrink-0">
+            Carlos
+          </button>
+          <button type="button" id="filtroFacturaVend-Daniel" onclick="cambiarFiltroVendedorFacturas('Daniel')" class="px-3 py-1 rounded-xl font-bold text-xs bg-slate-800 text-slate-300 hover:text-white transition-all active:scale-95 shrink-0">
+            Daniel
+          </button>
+          <button type="button" id="filtroFacturaVend-preventa" onclick="cambiarFiltroVendedorFacturas('preventa')" class="px-3 py-1 rounded-xl font-bold text-xs bg-slate-800 text-slate-300 hover:text-white transition-all active:scale-95 shrink-0">
+            Preventa
+          </button>
+        </div>
+      </div>
+
+      <!-- Contenedor de la Lista de Facturas -->
+      <div id="facturasListContainer" class="space-y-3">
+        <!-- Renderizado dinámicamente por renderizarModuloFacturas() -->
+      </div>
+
+      <!-- Extra spacer for mobile bottom navigation -->
+      <div style="height: 120px; width: 100%;" class="w-full block"></div>
+    </section>
+
+    <!-- ============================================================== -->
+    <!-- VIEW: APARTADOS (RESERVA DE MERCADERÍA Y GESTIÓN DE ABONOS)     -->
+    <!-- ============================================================== -->
+    <section id="viewApartados" class="space-y-3.5 hidden">
+      <!-- Tarjeta Encabezado Principal -->
+      <div class="bg-gradient-to-r from-blue-950/80 via-slate-900 to-slate-950 border border-blue-500/40 rounded-3xl p-4 shadow-xl space-y-3">
+        <div class="flex items-center justify-between border-b border-blue-500/20 pb-2.5">
+          <div class="flex items-center gap-2.5">
+            <div class="p-2.5 rounded-2xl bg-blue-500/20 text-blue-400">
+              <i data-lucide="bookmark" class="w-6 h-6"></i>
+            </div>
+            <div>
+              <h2 class="text-base font-black text-white leading-tight">Control de Apartados</h2>
+              <p class="text-[11px] text-blue-300">Mercadería reservada, abonos y saldos</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <button onclick="cambiarModoPOS('apartado'); cambiarVista('ventas');" title="Crear nuevo apartado" class="px-2.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 shadow-sm">
+              <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+              <span>Nuevo</span>
+            </button>
+            <button onclick="sincronizarConSheets(true)" title="Sincronizar apartados con Sheets" class="p-1.5 bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/40 text-blue-300 rounded-xl text-xs active:scale-95 transition-all">
+              <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Métricas Rápidas de Apartados -->
+        <div class="grid grid-cols-3 gap-2 text-center">
+          <div class="p-2 bg-slate-950/70 border border-slate-800 rounded-2xl">
+            <span class="text-[10px] text-slate-400 uppercase font-bold block">Activos</span>
+            <span id="apartadosActivosCount" class="text-sm font-black text-blue-400 font-mono">0</span>
+          </div>
+          <div class="p-2 bg-slate-950/70 border border-slate-800 rounded-2xl">
+            <span class="text-[10px] text-slate-400 uppercase font-bold block">Por Cobrar</span>
+            <span id="apartadosSaldoPendienteCRC" class="text-xs font-black text-amber-400 font-mono">₡0</span>
+          </div>
+          <div class="p-2 bg-slate-950/70 border border-slate-800 rounded-2xl">
+            <span class="text-[10px] text-slate-400 uppercase font-bold block">Abonado</span>
+            <span id="apartadosTotalAbonadoCRC" class="text-xs font-bold text-emerald-400 font-mono">₡0</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Buscador y Filtros de Estado -->
+      <div class="bg-slate-900 border border-slate-800 rounded-3xl p-3.5 shadow-xl space-y-3">
+        <!-- Campo de búsqueda -->
+        <div class="relative">
+          <i data-lucide="search" class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"></i>
+          <input type="text" id="searchApartadosInput" oninput="filtrarApartadosUI()" placeholder="Buscar por cliente, teléfono, N° apartado (APT-...) o licor..."
+            class="w-full pl-10 pr-4 py-2.5 bg-slate-950 border border-slate-800 rounded-2xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-all shadow-inner">
+        </div>
+
+        <!-- Filtros Rápidos por Estado -->
+        <div class="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+          <button type="button" id="filtroAptEstado-activos" onclick="cambiarFiltroEstadoApartados('activos')" class="px-3 py-1 rounded-xl font-bold text-xs bg-blue-600 text-white transition-all active:scale-95 shrink-0 shadow-sm">
+            Activos
+          </button>
+          <button type="button" id="filtroAptEstado-liquidados" onclick="cambiarFiltroEstadoApartados('liquidados')" class="px-3 py-1 rounded-xl font-bold text-xs bg-slate-800 text-slate-300 hover:text-white transition-all active:scale-95 shrink-0">
+            Liquidados (₡0)
+          </button>
+          <button type="button" id="filtroAptEstado-entregados" onclick="cambiarFiltroEstadoApartados('entregados')" class="px-3 py-1 rounded-xl font-bold text-xs bg-slate-800 text-slate-300 hover:text-white transition-all active:scale-95 shrink-0">
+            Entregados
+          </button>
+          <button type="button" id="filtroAptEstado-todos" onclick="cambiarFiltroEstadoApartados('todos')" class="px-3 py-1 rounded-xl font-bold text-xs bg-slate-800 text-slate-300 hover:text-white transition-all active:scale-95 shrink-0">
+            Todos
+          </button>
+        </div>
+      </div>
+
+      <!-- Contenedor de la Lista de Apartados -->
+      <div id="apartadosListContainer" class="space-y-3">
+        <!-- Renderizado dinámicamente por renderizarModuloApartados() -->
+      </div>
+
+      <!-- Extra spacer for mobile bottom navigation -->
+      <div style="height: 120px; width: 100%;" class="w-full block"></div>
+    </section>
+
   </main>
 
   <!-- ============================================================== -->
   <!-- MODAL: CREAR / EDITAR PRODUCTO (DUAL CURRENCY)                 -->
   <!-- ============================================================== -->
-    <!-- ============================================================== -->
+  <!-- ============================================================== -->
+  <!-- MODAL: REGISTRAR ABONO A APARTADO                              -->
+  <!-- ============================================================== -->
+  <div id="modalRegistrarAbonoApartado" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in">
+    <div class="bg-slate-900 border border-slate-800 rounded-t-3xl sm:rounded-3xl max-w-md w-full p-5 space-y-4 shadow-2xl animate-slide-up">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div class="flex items-center gap-2">
+          <div class="p-2 rounded-xl bg-blue-500/20 text-blue-400">
+            <i data-lucide="hand-coins" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h3 class="text-sm font-bold text-white">Registrar Abono</h3>
+            <p id="modalAbonoApartadoSubtitulo" class="text-[11px] text-slate-400 font-mono">APT-XXXXXX</p>
+          </div>
+        </div>
+        <button onclick="cerrarModalAbonoApartado()" class="p-1.5 rounded-xl bg-slate-800 text-slate-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+
+      <!-- Resumen actual del saldo -->
+      <div class="bg-slate-950/80 border border-slate-800 rounded-2xl p-3 grid grid-cols-2 gap-2 text-xs">
+        <div>
+          <span class="text-[10px] text-slate-400 block">Total Apartado:</span>
+          <span id="modalAbonoTotalCRC" class="font-mono font-bold text-white text-sm">₡0</span>
+        </div>
+        <div>
+          <span class="text-[10px] text-slate-400 block">Saldo Actual Pendiente:</span>
+          <span id="modalAbonoSaldoCRC" class="font-mono font-black text-amber-400 text-sm">₡0</span>
+        </div>
+      </div>
+
+      <!-- Formulario de Abono -->
+      <form onsubmit="event.preventDefault(); guardarNuevoAbonoApartado();" class="space-y-3 text-xs">
+        <input type="hidden" id="modalAbonoIdApartado">
+        <div>
+          <label for="inputMontoAbonoCRC" class="block font-semibold text-slate-300 mb-1">Monto a Abonar (₡ Colones):</label>
+          <input type="number" id="inputMontoAbonoCRC" required min="100" step="100" placeholder="Ej: 5000"
+            class="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white font-mono font-bold text-sm focus:border-blue-400 focus:outline-none">
+        </div>
+
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label for="selectMetodoPagoAbono" class="block font-semibold text-slate-300 mb-1">Método de Pago:</label>
+            <select id="selectMetodoPagoAbono" class="w-full px-2.5 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white font-semibold focus:border-blue-400">
+              <option value="Efectivo">💵 Efectivo</option>
+              <option value="SINPE / Transf.">📱 SINPE</option>
+              <option value="Tarjeta">💳 Tarjeta</option>
+            </select>
+          </div>
+          <div>
+            <label for="selectCobradoPorAbono" class="block font-semibold text-slate-300 mb-1">Recibido por:</label>
+            <select id="selectCobradoPorAbono" class="w-full px-2.5 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white font-semibold focus:border-blue-400">
+              <option value="Carlos">Carlos</option>
+              <option value="Daniel">Daniel</option>
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label for="inputNotasAbono" class="block text-slate-400 mb-1">Notas u observaciones:</label>
+          <input type="text" id="inputNotasAbono" placeholder="Opcional..."
+            class="w-full px-3 py-1.5 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs focus:border-blue-400 focus:outline-none">
+        </div>
+
+        <button type="submit" class="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black rounded-xl shadow-lg shadow-blue-500/25 active:scale-95 transition-all flex items-center justify-center gap-2">
+          <i data-lucide="check" class="w-4 h-4"></i>
+          <span>GUARDAR ABONO</span>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============================================================== -->
   <!-- MODAL: EXPORTAR CATÁLOGO / LISTA DE PRECIOS A WHATSAPP         -->
   <!-- ============================================================== -->
   <div id="modalExportarCatalogo" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in">
@@ -2622,6 +2917,8 @@
         <button onclick="cerrarMenuMas()" aria-label="Cerrar menú" class="p-2 rounded-xl bg-slate-800 text-slate-300"><i data-lucide="x" class="w-5 h-5"></i></button>
       </div>
       <div class="grid grid-cols-2 gap-2.5">
+        <button onclick="irDesdeMenuMas('apartados')" class="col-span-2 p-3 rounded-2xl bg-gradient-to-r from-blue-950/90 to-slate-800 border border-blue-500/50 text-left active:scale-95 flex items-center gap-3 shadow-md"><div class="p-2 rounded-xl bg-blue-500/20 text-blue-400 shrink-0"><i data-lucide="bookmark" class="w-5 h-5"></i></div><span><span class="block text-xs font-bold text-white">Apartados de Clientes</span><span class="text-[10px] text-blue-300">Mercadería reservada, abonos y entregas</span></span></button>
+        <button onclick="irDesdeMenuMas('facturas')" class="col-span-2 p-3 rounded-2xl bg-gradient-to-r from-emerald-950/90 to-slate-800 border border-emerald-500/50 text-left active:scale-95 flex items-center gap-3 shadow-md"><div class="p-2 rounded-xl bg-emerald-500/20 text-emerald-400 shrink-0"><i data-lucide="receipt" class="w-5 h-5"></i></div><span><span class="block text-xs font-bold text-white">Facturas Generadas</span><span class="text-[10px] text-emerald-300">Historial de ventas y reenvío por WhatsApp</span></span></button>
         <button onclick="irDesdeMenuMas('compras')" class="p-3 rounded-2xl bg-slate-800 border border-slate-700 text-left active:scale-95"><i data-lucide="truck" class="w-5 h-5 text-amber-400 mb-2"></i><span class="block text-xs font-bold text-white">Compras</span><span class="text-[10px] text-slate-400">Entradas de inventario</span></button>
         <button onclick="irDesdeMenuMas('cuentas')" class="p-3 rounded-2xl bg-slate-800 border border-slate-700 text-left active:scale-95"><i data-lucide="badge-dollar-sign" class="w-5 h-5 text-rose-400 mb-2"></i><span class="block text-xs font-bold text-white">Cuentas</span><span class="text-[10px] text-slate-400">Cobros y pagos</span></button>
         <button onclick="irDesdeMenuMas('comisiones')" class="p-3 rounded-2xl bg-slate-800 border border-slate-700 text-left active:scale-95"><i data-lucide="badge-percent" class="w-5 h-5 text-emerald-400 mb-2"></i><span class="block text-xs font-bold text-white">Comisiones</span><span class="text-[10px] text-slate-400">Liquidaciones</span></button>
@@ -2653,6 +2950,6 @@
   </div>
 
   <!-- Application Logic -->
-  <script src="app.js?v=20261005_01"></script>
+  <script src="app.js?v=20261008_02"></script>
 </body>
 </html>
